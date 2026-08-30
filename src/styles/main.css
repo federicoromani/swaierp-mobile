@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Alta densidad, texto legible chico: mismo criterio que css/saas-template.css
+   del ERP (13px base, sans-serif del sistema). */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  @apply bg-surface text-ink font-sans antialiased;
+  font-size: 13px;
+}
+
+/* Evita el "pull to refresh" / selección de texto accidental típicos de
+   una PWA usada a los toques rápidos en depósito/mostrador. */
+body {
+  overscroll-behavior-y: contain;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}

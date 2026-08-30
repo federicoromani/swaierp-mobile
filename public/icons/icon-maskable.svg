@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Maskable: el sistema operativo recorta con su propia máscara (círculo,
+       squircle, etc.), así que el fondo cubre todo el viewport SIN esquinas
+       redondeadas propias, y el glifo queda dentro de la zona segura (~80%
+       central) para no perder contenido en el recorte. -->
+  <rect width="512" height="512" fill="#0f172a"/>
+  <g fill="#3b82f6" transform="translate(51 51) scale(0.8)">
+    <rect x="128" y="296" width="120" height="96" rx="10"/>
+    <rect x="264" y="296" width="120" height="96" rx="10"/>
+    <rect x="196" y="176" width="120" height="96" rx="10"/>
+  </g>
+  <g fill="#f1f5f9" opacity="0.9" transform="translate(51 51) scale(0.8)">
+    <rect x="128" y="296" width="120" height="18" rx="4"/>
+    <rect x="264" y="296" width="120" height="18" rx="4"/>
+    <rect x="196" y="176" width="120" height="18" rx="4"/>
+  </g>
+</svg>

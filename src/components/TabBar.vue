@@ -1,0 +1,26 @@
+<script setup>
+import { useRoute } from 'vue-router'
+
+const route = useRoute()
+
+function activo(prefijo) {
+  return route.path.startsWith(prefijo) ? 'text-accent' : 'text-muted'
+}
+</script>
+
+<template>
+  <nav class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around py-2 z-50">
+    <router-link to="/buscar" class="flex flex-col items-center gap-1 text-xs font-semibold" :class="activo('/buscar')">
+      <i class="fas fa-boxes-packing text-lg"></i>
+      <span>Stock/Precio</span>
+    </router-link>
+    <router-link to="/importar" class="flex flex-col items-center gap-1 text-xs font-semibold" :class="activo('/importar')">
+      <i class="fas fa-wand-magic-sparkles text-lg"></i>
+      <span>IA Lista PDF</span>
+    </router-link>
+    <router-link to="/reportes" class="flex flex-col items-center gap-1 text-xs font-semibold" :class="activo('/reportes')">
+      <i class="fas fa-chart-line text-lg"></i>
+      <span>Reporte</span>
+    </router-link>
+  </nav>
+</template>

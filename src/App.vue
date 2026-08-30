@@ -1,0 +1,57 @@
+<script setup>
+import { RouterView, useRoute } from 'vue-router'
+import { computed } from 'vue'
+import TabBar from './components/TabBar.vue'
+import AppBrand from './components/AppBrand.vue'
+import { useUiStore } from './stores/ui'
+
+const ui = useUiStore()
+const route = useRoute()
+
+// El login (y cualquier vista futura marcada requiresAuth:false) no lleva
+// header ni tab bar del ERP.
+const mostrarChrome = computed(() => route.meta.requiresAuth !== false)
+</script>
+
+<template>
+  <div class="min-h-screen bg-surface text-ink font-sans">
+    <header v-if="mostrarChrome" class="bg-primary p-4 sticky top-0 z-40 shadow-md flex justify-between items-center">
+      <AppBrand />
+      <div class="flex items-center gap-2 text-xs text-white bg-white/10 px-3 py-1.5 rounded-full">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        Conectado
+      </div>
+    </header>
+
+    <main class="p-4 max-w-lg mx-auto" :class="mostrarChrome ? 'pb-20' : ''">
+      <RouterView />
+    </main>
+
+    <transition name="fade">
+      <div
+        v-if="ui.toast"
+        class="fixed bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 rounded-lg shadow-lg text-sm text-white z-50 max-w-[90vw] text-center"
+        :class="{
+          'bg-danger': ui.toast.tipo === 'error',
+          'bg-success': ui.toast.tipo === 'success',
+          'bg-primary': ui.toast.tipo === 'info',
+        }"
+      >
+        {{ ui.toast.mensaje }}
+      </div>
+    </transition>
+
+    <TabBar v-if="mostrarChrome" />
+  </div>
+</template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>
