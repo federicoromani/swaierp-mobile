@@ -1,17 +1,35 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useReportesStore } from '../stores/reportes'
 import { useProductosStore } from '../stores/productos'
+import { useInfiniteScroll } from '../composables/useInfiniteScroll'
 
 const reportes = useReportesStore()
 const productos = useProductosStore()
 const router = useRouter()
 const tab = ref('pendientes')
 
+const sentinelPendientes = ref(null)
+const sentinelAjustes = ref(null)
+
+const hasMorePendientes = computed(() => reportes.pendientes.items.length < reportes.pendientes.total)
+const hasMoreAjustes = computed(() => reportes.ajustes.items.length < reportes.ajustes.total)
+
 onMounted(() => {
   reportes.cargarPendientes(0)
 })
+
+useInfiniteScroll(
+  sentinelPendientes,
+  () => reportes.cargarPendientes(reportes.pendientes.items.length),
+  { hasMore: hasMorePendientes, loading: computed(() => reportes.cargando) }
+)
+useInfiniteScroll(
+  sentinelAjustes,
+  () => reportes.cargarAjustes(reportes.ajustes.items.length),
+  { hasMore: hasMoreAjustes, loading: computed(() => reportes.cargando) }
+)
 
 function cambiarTab(nuevo) {
   tab.value = nuevo
@@ -66,13 +84,12 @@ function irAProducto(prodId) {
           </span>
         </button>
       </div>
-      <button
-        v-if="reportes.pendientes.items.length < reportes.pendientes.total"
-        class="w-full text-xs font-semibold text-accent bg-white border border-slate-200 rounded-lg py-2"
-        @click="reportes.cargarPendientes(reportes.pendientes.items.length)"
-      >
-        Cargar más
-      </button>
+      <!-- Sentinela invisible: dispara la carga de la próxima página al
+           entrar en el viewport (ver useInfiniteScroll). Sin texto ni botón
+           salvo mientras carga, para que el scroll se sienta continuo. -->
+      <div v-if="hasMorePendientes" ref="sentinelPendientes" class="py-2 text-center text-xs text-muted">
+        {{ reportes.cargando ? 'Cargando más...' : '' }}
+      </div>
     </div>
 
     <div v-else class="space-y-2">
@@ -97,13 +114,9 @@ function irAProducto(prodId) {
           <span class="shrink-0 text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-semibold">Monitorear</span>
         </button>
       </div>
-      <button
-        v-if="reportes.ajustes.items.length < reportes.ajustes.total"
-        class="w-full text-xs font-semibold text-accent bg-white border border-slate-200 rounded-lg py-2"
-        @click="reportes.cargarAjustes(reportes.ajustes.items.length)"
-      >
-        Cargar más
-      </button>
+      <div v-if="hasMoreAjustes" ref="sentinelAjustes" class="py-2 text-center text-xs text-muted">
+        {{ reportes.cargando ? 'Cargando más...' : '' }}
+      </div>
     </div>
   </section>
 </template>

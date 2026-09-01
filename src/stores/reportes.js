@@ -14,7 +14,9 @@ export const useReportesStore = defineStore('reportes', () => {
       if (!data.success) return
       pendientes.value = {
         items: offset === 0 ? data.items : [...pendientes.value.items, ...data.items],
-        total: data.total,
+        // El backend solo recalcula "total" en la primera página (offset 0):
+        // en "cargar más" mantenemos el que ya teníamos.
+        total: offset === 0 ? data.total : pendientes.value.total,
       }
     } finally {
       cargando.value = false
@@ -28,7 +30,7 @@ export const useReportesStore = defineStore('reportes', () => {
       if (!data.success) return
       ajustes.value = {
         items: offset === 0 ? data.items : [...ajustes.value.items, ...data.items],
-        total: data.total,
+        total: offset === 0 ? data.total : ajustes.value.total,
       }
     } finally {
       cargando.value = false
