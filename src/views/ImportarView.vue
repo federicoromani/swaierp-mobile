@@ -62,7 +62,7 @@ function formatearMonto(n) {
     </div>
 
     <!-- Selección de proveedor + archivo -->
-    <div v-else-if="!store.items.length && !store.analizando" class="bg-white p-4 rounded-2xl shadow-sm border space-y-4">
+    <div v-else-if="!store.fuente && !store.analizando" class="bg-white p-4 rounded-2xl shadow-sm border space-y-4">
       <div>
         <h2 class="font-bold text-base mb-1">Importar lista de precios</h2>
         <p class="text-xs text-muted">
@@ -110,7 +110,7 @@ function formatearMonto(n) {
     </div>
 
     <!-- Checklist de resultados -->
-    <div v-if="!store.analizando && store.items.length" class="space-y-3">
+    <div v-if="!store.analizando && store.fuente" class="space-y-3">
       <div v-if="store.sinMatch > 0" class="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-900">
         <i class="fas fa-circle-info mr-1"></i>
         <strong>{{ store.sinMatch }}</strong> línea{{ store.sinMatch === 1 ? '' : 's' }} del archivo no se
@@ -120,7 +120,15 @@ function formatearMonto(n) {
         {{ aviso }}
       </div>
 
-      <div class="bg-white rounded-xl shadow-sm border divide-y text-xs">
+      <div v-if="!store.items.length" class="bg-white rounded-2xl p-6 shadow-sm border text-center space-y-3">
+        <i class="fas fa-magnifying-glass text-3xl text-muted"></i>
+        <p class="text-sm font-semibold">No se encontró ningún producto del catálogo en este archivo.</p>
+        <button class="w-full bg-primary text-white font-semibold py-3 rounded-xl shadow-sm active:scale-95" @click="importarOtra">
+          <i class="fas fa-rotate-left mr-2"></i>Probar con otro archivo
+        </button>
+      </div>
+
+      <div v-else class="bg-white rounded-xl shadow-sm border divide-y text-xs">
         <label
           v-for="item in store.items"
           :key="item.prod_id"
