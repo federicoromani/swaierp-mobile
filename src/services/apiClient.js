@@ -95,3 +95,41 @@ export function get(path, params) {
 export function post(path, body, opciones = {}) {
   return peticion(path, { method: 'POST', body, ...opciones })
 }
+
+/**
+ * Para subir archivos (multipart/form-data). Deliberadamente NO reusa
+ * peticion(): esa arma un body urlencoded a partir de un objeto plano, acá
+ * el body YA es un FormData y no hay que tocarlo, ni fijar Content-Type (el
+ * browser pone el boundary multipart solo si el header queda ausente).
+ * Mismo manejo de 401/refresh que peticion().
+ *
+ * @param {string} path
+ * @param {FormData} formData
+ */
+export async function postFormData(path, formData) {
+  const authStore = useAuthStore()
+  const url = BASE_URL + path
+  const headers = {}
+  if (authStore.accessToken) {
+    headers['Authorization'] = `Bearer ${authStore.accessToken}`
+  }
+
+  let res
+  try {
+    res = await fetch(url, { method: 'POST', headers, body: formData })
+  } catch {
+    throw new Error('No hay conexión con el servidor.')
+  }
+
+  if (res.status === 401) {
+    const nuevoToken = await refrescarUnaVez()
+    if (nuevoToken) {
+      headers['Authorization'] = `Bearer ${nuevoToken}`
+      res = await fetch(url, { method: 'POST', headers, body: formData })
+    } else {
+      await authStore.limpiarSesionLocal()
+    }
+  }
+
+  return parsearJson(res)
+}

@@ -1,7 +1,9 @@
 <script setup>
 import { useRoute } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 const route = useRoute()
+const auth = useAuthStore()
 
 function activo(prefijo) {
   return route.path.startsWith(prefijo) ? 'text-accent' : 'text-muted'
@@ -14,7 +16,16 @@ function activo(prefijo) {
       <i class="fas fa-boxes-packing text-lg"></i>
       <span>Stock/Precio</span>
     </router-link>
-    <router-link to="/importar" class="flex flex-col items-center gap-1 text-xs font-semibold" :class="activo('/importar')">
+    <!-- El backend restringe la importación a ADMINISTRADOR(1)/AVANZADO(2)
+         (apiRequireRol en api_importacion_precios.php) -- esto es solo UX,
+         para no mostrarle a un usuario FISCAL(3) un botón que le va a
+         devolver 403. -->
+    <router-link
+      v-if="auth.usuario?.rol !== 3"
+      to="/importar"
+      class="flex flex-col items-center gap-1 text-xs font-semibold"
+      :class="activo('/importar')"
+    >
       <i class="fas fa-wand-magic-sparkles text-lg"></i>
       <span>IA Lista PDF</span>
     </router-link>
