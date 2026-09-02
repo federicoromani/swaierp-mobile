@@ -49,8 +49,18 @@ function alPerderFoco() {
   <div class="relative">
     <div class="relative">
       <i class="fas fa-magnifying-glass absolute left-3 top-3.5 text-muted"></i>
+      <!-- :value + @input en vez de v-model a propósito: v-model usa la directiva
+           vModelText de Vue, que ignora el evento 'input' mientras el teclado está
+           en composición IME (compositionstart -> compositionend) para no romper
+           la escritura en CJK. En Android, Gboard envuelve TAMBIÉN la escritura
+           predictiva en español en eventos de composición, así que con v-model
+           "query" no se actualizaba (ni disparaba la búsqueda debounced) hasta
+           que el input perdía el foco y forzaba el fin de la composición — cerrar
+           el teclado "activaba" la búsqueda. Este input es texto libre sin
+           formateo, así que es seguro reaccionar a cada tecla sin ese guard. -->
       <input
-        v-model="query"
+        :value="query"
+        @input="query = $event.target.value"
         type="text"
         inputmode="search"
         autocomplete="off"
