@@ -22,6 +22,7 @@ Copiar `.env.example` a `.env.local` (desarrollo) o a `.env.production`
 ```bash
 VITE_API_BASE_URL=http://localhost:8880/swaidemo/apps   # sin barra final
 VITE_COMERCIO_NOMBRE=SWAI ERP
+VITE_IMPORTAR_HABILITADO=false   # pantalla "IA Lista PDF"; apagada si no se pone en true
 ```
 
 ## Desarrollo

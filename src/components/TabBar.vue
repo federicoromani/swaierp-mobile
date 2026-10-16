@@ -1,6 +1,7 @@
 <script setup>
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { importarHabilitado } from '../config/features'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -19,9 +20,10 @@ function activo(prefijo) {
     <!-- El backend restringe la importación a ADMINISTRADOR(1)/AVANZADO(2)
          (apiRequireRol en api_importacion_precios.php) -- esto es solo UX,
          para no mostrarle a un usuario FISCAL(3) un botón que le va a
-         devolver 403. -->
+         devolver 403. Además se oculta si la pantalla está deshabilitada
+         para este comercio (VITE_IMPORTAR_HABILITADO). -->
     <router-link
-      v-if="auth.usuario?.rol !== 3"
+      v-if="importarHabilitado() && auth.usuario?.rol !== 3"
       to="/importar"
       class="flex flex-col items-center gap-1 text-xs font-semibold"
       :class="activo('/importar')"

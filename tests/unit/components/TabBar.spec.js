@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createTestingPinia } from '@pinia/testing'
@@ -43,6 +43,26 @@ describe('components/TabBar', () => {
   it('muestra el link a /importar para rol AVANZADO (2)', async () => {
     const wrapper = await montar({ rol: 2 })
     expect(wrapper.find('a[href="/importar"]').exists()).toBe(true)
+  })
+
+  describe('con VITE_IMPORTAR_HABILITADO apagado', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    it('oculta el link a /importar aunque el rol lo permita', async () => {
+      vi.stubEnv('VITE_IMPORTAR_HABILITADO', 'false')
+      const wrapper = await montar({ rol: 1 })
+      expect(wrapper.find('a[href="/importar"]').exists()).toBe(false)
+    })
+
+    it('sin la variable definida, también queda oculto (apagado por defecto)', async () => {
+      vi.stubEnv('VITE_IMPORTAR_HABILITADO', undefined)
+      const wrapper = await montar({ rol: 1 })
+      expect(wrapper.find('a[href="/importar"]').exists()).toBe(false)
+      expect(wrapper.find('a[href="/buscar"]').exists()).toBe(true)
+      expect(wrapper.find('a[href="/reportes"]').exists()).toBe(true)
+    })
   })
 
   it('muestra el link si no hay usuario todavía (optional chaining sobre null)', async () => {

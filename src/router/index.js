@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { importarHabilitado } from '../config/features'
 
 const routes = [
   { path: '/', redirect: '/buscar' },
@@ -10,7 +11,14 @@ const routes = [
     meta: { requiresAuth: false },
   },
   { path: '/buscar', name: 'buscar', component: () => import('../views/BuscarView.vue') },
-  { path: '/importar', name: 'importar', component: () => import('../views/ImportarView.vue') },
+  {
+    path: '/importar',
+    name: 'importar',
+    component: () => import('../views/ImportarView.vue'),
+    // Deshabilitada por config: entrar por URL (o un acceso directo viejo)
+    // lleva a la pantalla principal en vez de mostrarla.
+    beforeEnter: () => importarHabilitado() || { path: '/buscar' },
+  },
   { path: '/reportes', name: 'reportes', component: () => import('../views/ReportesView.vue') },
 ]
 

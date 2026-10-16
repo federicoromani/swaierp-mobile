@@ -88,6 +88,39 @@ describe('router/index (guard de auth)', () => {
     expect(router.currentRoute.value.name).toBe('importar')
   })
 
+  it('con VITE_IMPORTAR_HABILITADO apagado, /importar redirige a /buscar', async () => {
+    vi.stubEnv('VITE_IMPORTAR_HABILITADO', 'false')
+    try {
+      const auth = useAuthStore()
+      auth.accessToken = 'tok'
+      auth.listo = true
+
+      await router.push('/importar')
+
+      expect(router.currentRoute.value.name).toBe('buscar')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('no autenticado entrando a /importar deshabilitada: va a login y, tras loguearse, termina en /buscar', async () => {
+    vi.stubEnv('VITE_IMPORTAR_HABILITADO', 'false')
+    try {
+      await router.push('/importar')
+      expect(router.currentRoute.value.name).toBe('login')
+      expect(router.currentRoute.value.query.redirect).toBe('/importar')
+
+      const auth = useAuthStore()
+      auth.accessToken = 'tok'
+      auth.listo = true
+      await router.push(router.currentRoute.value.query.redirect)
+
+      expect(router.currentRoute.value.name).toBe('buscar')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('si auth.listo es false, el guard llama restaurarSesion antes de decidir', async () => {
     const auth = useAuthStore()
     expect(auth.listo).toBe(false)
