@@ -82,4 +82,27 @@ describe('views/BuscarView', () => {
 
     expect(router.currentRoute.value.path).toBe('/reportes')
   })
+
+  it('renderiza HistorialProducto con productos.actual.historial solo si hay producto actual', async () => {
+    const conActual = await montar({
+      actual: { prod_id: 1, historial: [{ tipo: 'precio', costo_anterior: 1, costo_nuevo: 2, fecha: 'f' }] },
+    })
+    expect(conActual.wrapper.text()).toContain('Historial de este producto')
+    expect(conActual.wrapper.text()).toContain('Costo $1 → $2')
+
+    const sinActual = await montar({ actual: null })
+    expect(sinActual.wrapper.text()).not.toContain('Historial de este producto')
+  })
+
+  it('el banner de pendientes va debajo de la card del producto y antes del historial', async () => {
+    const { wrapper } = await montar({ pendientesTotal: 5, actual: { prod_id: 1, historial: [] } })
+    const html = wrapper.html()
+
+    const card = html.indexOf('producto-card-stub')
+    const banner = html.indexOf('sin controlar hace +7 días')
+    const historial = html.indexOf('Historial de este producto')
+    expect(card).toBeGreaterThan(-1)
+    expect(card).toBeLessThan(banner)
+    expect(banner).toBeLessThan(historial)
+  })
 })

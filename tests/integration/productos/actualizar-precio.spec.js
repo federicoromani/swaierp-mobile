@@ -1,4 +1,4 @@
-// Guardar precio (ProductoCard.vue) — P0: operación financiera. Monta
+// Guardar cambios de precio (ProductoCard.vue) — P0: operación financiera. Monta
 // ProductoCard solo, con `productos.actual` precargado a mano (no pasa por
 // la búsqueda/selección real, eso ya está cubierto en
 // seleccion-sincronizacion.spec.js) — así el foco queda 100% en el flujo de
@@ -12,7 +12,7 @@
 //   - actualizarPrecio() NO verifica que `actual.value.prod_id` siga
 //     coincidiendo antes de pisar la respuesta (a diferencia de
 //     ajustarStock, que sí lo hace — ver ajustar-stock.spec.js).
-//   - el único freno contra doble-submit es el :disabled del botón.
+//   - doble-submit: guardar() tiene guard interno además del :disabled.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -42,7 +42,7 @@ function inputPrecioVenta(wrapper) {
 }
 
 function botonGuardarPrecio(wrapper) {
-  return wrapper.findAll('button').find((b) => b.text().includes('Guardar precio'))
+  return wrapper.findAll('button').find((b) => b.text().includes('Guardar cambios'))
 }
 
 async function leerBody(request) {
@@ -106,7 +106,7 @@ describe('ProductoCard: guardar precio', () => {
     expect(wrapper.text()).not.toContain('Guardando...')
   })
 
-  it('error de red: mismo camino que el 400 — toast de error, guardandoPrecio vuelve a false', async () => {
+  it('error de red: mismo camino que el 400 — toast de error, guardando vuelve a false', async () => {
     server.use(...mockProductosEndpoint({ actualizarPrecio: () => HttpResponse.error() }))
 
     const { wrapper, ui } = montar(productoEjemplo({ prod_id: 101, costo: 800, precio_venta: 1200 }))
@@ -159,7 +159,7 @@ describe('ProductoCard: guardar precio', () => {
     expect(productos.actual.precio_venta).toBe(1500)
   })
 
-  it('[hallazgo] doble-submit real: dos clicks en "Guardar precio" sin esperar entre medio', async () => {
+  it('doble-submit real: dos clicks en "Guardar cambios" sin esperar entre medio — una sola request', async () => {
     let llamadas = 0
     server.use(
       ...mockProductosEndpoint({
@@ -180,13 +180,9 @@ describe('ProductoCard: guardar precio', () => {
 
     await esperarQue(() => expect(productos.actual.precio_venta).toBe(1500))
 
-    // Documentamos el resultado real (ver comentario de cabecera): no hay
-    // guard interno en guardarPrecio(), solo el :disabled del botón.
-    expect(llamadas).toBeGreaterThanOrEqual(1)
-    if (llamadas > 1) {
-      // eslint-disable-next-line no-console
-      console.warn(`[hallazgo] doble click en "Guardar precio" disparó ${llamadas} POST reales.`)
-    }
+    // guardar() tiene guard interno (`if (guardando.value) return`), no
+    // depende solo del :disabled del botón.
+    expect(llamadas).toBe(1)
   })
 
   it('[hallazgo] respuesta fuera de orden: guardar precio de A demorado, mientras tanto el store pasa a B — la respuesta de A pisa igual `actual`', async () => {

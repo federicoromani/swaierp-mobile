@@ -172,7 +172,7 @@ test('se recupera la conexión: la mutación falla con mensaje claro y, sin reca
     return route.abort('failed')
   })
   await bloqueCampo(page, 'Precio de venta').locator('input[type="number"]').fill('200')
-  const boton = page.getByRole('button', { name: /guardar precio/i })
+  const boton = page.getByRole('button', { name: /guardar cambios/i })
   await boton.click()
   await expect(page.getByText('No hay conexión con el servidor.')).toBeVisible()
 

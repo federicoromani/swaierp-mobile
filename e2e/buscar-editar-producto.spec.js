@@ -1,5 +1,5 @@
-// Journey: Buscar producto -> ver detalle -> editar precio (guardar aparte)
-// -> editar stock (guardar aparte). El journey de mayor uso real de la app
+// Journey: Buscar producto -> ver detalle -> editar precio y/o stock con un
+// solo "Guardar cambios" (manda solo lo que cambió). El journey de mayor uso real de la app
 // (empleado con el celular en el piso de venta). Ver
 // docs/testing/plan-agente-3-e2e.md §1 (P0).
 import { test, expect } from '@playwright/test'
@@ -59,14 +59,14 @@ test('editar precio: guarda y el margen mostrado se recalcula con el valor que p
     return { json: productoDetalle({ costo: 100, precio_venta: 250 }) }
   })
 
-  await page.getByRole('button', { name: /guardar precio/i }).click()
+  await page.getByRole('button', { name: /guardar cambios/i }).click()
 
   await expect(page.getByText('Precio actualizado.')).toBeVisible()
   // (250-100)/250*100 = 60.0% -- formateado es-AR con coma decimal.
   await expect(page.getByText('60,0%')).toBeVisible()
 })
 
-test('editar stock: stepper + tipeo directo, guarda por separado del precio', async ({ page }) => {
+test('editar stock: stepper + tipeo directo, solo manda ajustar_stock si el precio no cambió', async ({ page }) => {
   await buscarYSeleccionar(page, { detalle: productoDetalle({ stock_actual: 25 }) })
 
   const bloqueStock = bloqueCampo(page, 'Stock actual')
@@ -86,7 +86,7 @@ test('editar stock: stepper + tipeo directo, guarda por separado del precio', as
     return { json: { success: true, stock_actual: 30 } }
   })
 
-  await page.getByRole('button', { name: /guardar stock/i }).click()
+  await page.getByRole('button', { name: /guardar cambios/i }).click()
   await expect(page.getByText('Stock actualizado.')).toBeVisible()
   await expect(stockInput).toHaveValue('30')
 })
@@ -105,7 +105,7 @@ test('caso negativo: precio de venta <= costo, el backend lo rechaza y no se apl
     }
   })
 
-  await page.getByRole('button', { name: /guardar precio/i }).click()
+  await page.getByRole('button', { name: /guardar cambios/i }).click()
   await expect(page.getByText('El precio de venta no puede ser menor o igual al costo.')).toBeVisible()
   // El valor mostrado de precio de venta NO cambió a lo que hubiera devuelto
   // un éxito -- sigue siendo el 80 que el usuario tipeó, porque actual.value
@@ -125,7 +125,7 @@ test('caso negativo: API caída al guardar precio -- mensaje claro, el valor tip
     return route.abort('failed')
   })
 
-  const boton = page.getByRole('button', { name: /guardar precio/i })
+  const boton = page.getByRole('button', { name: /guardar cambios/i })
   await boton.click()
 
   await expect(page.getByText('No hay conexión con el servidor.')).toBeVisible()
@@ -133,30 +133,48 @@ test('caso negativo: API caída al guardar precio -- mensaje claro, el valor tip
   await expect(bloqueCampo(page, 'Precio de venta').locator('input[type="number"]')).toHaveValue('200')
 })
 
-test('caso negativo: doble submit en "Guardar precio" -- solo una request real', async ({ page }) => {
+test('caso negativo: doble submit en "Guardar cambios" -- solo una request real', async ({ page }) => {
   await buscarYSeleccionar(page, { detalle: productoDetalle({ costo: 100, precio_venta: 155 }) })
+  await bloqueCampo(page, 'Precio de venta').locator('input[type="number"]').fill('200')
 
   const contador = contarRequests(page, PRODUCTOS_URL, 'POST')
   await mockApi(page, PRODUCTOS_URL, async (route, request) => {
     const q = leerQueryParams(request)
     if (q.action) return { status: 400, json: { success: false } }
-    return { json: productoDetalle({ costo: 100, precio_venta: 155 }) }
+    return { json: productoDetalle({ costo: 100, precio_venta: 200 }) }
   })
 
   await page.evaluate(() => {
-    const botones = [...document.querySelectorAll('button')].filter((b) => b.textContent.includes('Guardar precio'))
+    const botones = [...document.querySelectorAll('button')].filter((b) => b.textContent.includes('Guardar cambios'))
     botones[0]?.click()
     botones[0]?.click()
   })
 
   await expect(page.getByText('Precio actualizado.')).toBeVisible()
-  // Mismo patrón que en LoginView (ver auth.spec.js y test-matrix.md §2,
-  // hallazgo 7): `guardarPrecio()` en ProductoCard.vue pone
-  // `guardandoPrecio.value = true` sin chequear el valor anterior antes de
-  // seguir -- el :disabled del DOM llega un microtask tarde para un doble
-  // click sincrónico. Confirmado con este test: salen 2 requests, no 1. No
-  // se "arregla" acá -- ver recomendación en el reporte de Ronda 2.
-  expect(contador.valor).toBe(2)
+  // El :disabled del DOM llega un microtask tarde para un doble click
+  // sincrónico (hallazgo 7 de test-matrix.md §2); guardar() en
+  // ProductoCard.vue lo cubre con un guard `if (guardando.value) return`.
+  expect(contador.valor).toBe(1)
+})
+
+test('reiniciar: descarta los cambios sin guardar y vuelve a los valores del producto', async ({ page }) => {
+  await buscarYSeleccionar(page, { detalle: productoDetalle({ stock_actual: 25, costo: 100, precio_venta: 155 }) })
+
+  const reiniciar = page.getByRole('button', { name: 'Reiniciar valores' })
+  await expect(reiniciar).toHaveCount(0)
+
+  await bloqueCampo(page, 'Stock actual').locator('input[type="number"]').fill('3')
+  await bloqueCampo(page, 'Precio de costo').locator('input[type="number"]').fill('200')
+  // La venta acompaña al costo con la ganancia actual (55%).
+  await expect(bloqueCampo(page, 'Precio de venta').locator('input[type="number"]')).toHaveValue('310')
+
+  await reiniciar.click()
+
+  await expect(bloqueCampo(page, 'Stock actual').locator('input[type="number"]')).toHaveValue('25')
+  await expect(bloqueCampo(page, 'Precio de costo').locator('input[type="number"]')).toHaveValue('100')
+  await expect(bloqueCampo(page, 'Precio de venta').locator('input[type="number"]')).toHaveValue('155')
+  await expect(reiniciar).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /guardar cambios/i })).toBeDisabled()
 })
 
 test('caso negativo: búsqueda sin resultados', async ({ page }) => {

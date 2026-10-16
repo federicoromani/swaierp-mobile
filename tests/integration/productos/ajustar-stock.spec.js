@@ -31,7 +31,7 @@ function inputStock(wrapper) {
 }
 
 function botonGuardarStock(wrapper) {
-  return wrapper.findAll('button').find((b) => b.text().includes('Guardar stock'))
+  return wrapper.findAll('button').find((b) => b.text().includes('Guardar cambios'))
 }
 
 async function leerBody(request) {
@@ -118,7 +118,7 @@ describe('ProductoCard: ajustar stock', () => {
     expect(productos.actual.stock_actual).toBe(5)
   })
 
-  it('error de negocio/red: toast de error, guardandoStock vuelve a false, el input conserva lo tipeado', async () => {
+  it('error de negocio/red: toast de error, guardando vuelve a false, el input conserva lo tipeado', async () => {
     server.use(
       ...mockProductosEndpoint({
         ajustarStock: () => HttpResponse.json({ success: false, error: 'No se pudo ajustar el stock.' }, { status: 400 }),

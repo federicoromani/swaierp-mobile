@@ -26,6 +26,7 @@ export function productoDetalle(overrides = {}) {
     stock_actual: 25,
     costo: 100,
     precio_venta: 155,
+    ganancia_pct: 55,
     historial: [
       { tipo: 'precio', costo_anterior: 90, costo_nuevo: 100, fecha: '12/08/2026' },
       { tipo: 'stock', cantidad: -3, comentario: 'Venta mostrador', fecha: '10/08/2026' },

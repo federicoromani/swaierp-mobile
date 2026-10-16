@@ -57,6 +57,7 @@ export function itemBusqueda(overrides = {}) {
     costo: 800,
     precio_venta: 1200,
     margen_pct: 33.3,
+    ganancia_pct: 50,
     stock_actual: 24,
     ultimo_conteo: '2026-08-20',
     ultimo_ajuste_precio: '2026-08-15',

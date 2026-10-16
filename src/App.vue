@@ -4,9 +4,13 @@ import { computed } from 'vue'
 import TabBar from './components/TabBar.vue'
 import AppBrand from './components/AppBrand.vue'
 import { useUiStore } from './stores/ui'
+import { useTecladoVirtual } from './composables/useTecladoVirtual'
 
 const ui = useUiStore()
 const route = useRoute()
+// Con el teclado abierto (interactive-widget=resizes-content) la tab bar
+// quedaría flotando pegada encima del teclado, tapando el formulario.
+const tecladoAbierto = useTecladoVirtual()
 
 // El login (y cualquier vista futura marcada requiresAuth:false) no lleva
 // header ni tab bar del ERP.
@@ -41,7 +45,7 @@ const mostrarChrome = computed(() => route.meta.requiresAuth !== false)
       </div>
     </transition>
 
-    <TabBar v-if="mostrarChrome" />
+    <TabBar v-if="mostrarChrome && !tecladoAbierto" />
   </div>
 </template>
 
