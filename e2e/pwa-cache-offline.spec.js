@@ -22,7 +22,7 @@ import { mockApi, leerQueryParams } from './support/mockApi.js'
 import { PRODUCTOS_URL } from './support/urls.js'
 import { productoResultado, productoDetalle } from './support/fixtures.js'
 import { loginComo } from './support/login.js'
-import { bloqueCampo } from './support/locators.js'
+import { campoPrecio } from './support/locators.js'
 
 async function esperarSwControlando(page) {
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null, { timeout: 10000 })
@@ -171,8 +171,8 @@ test('se recupera la conexión: la mutación falla con mensaje claro y, sin reca
     }
     return route.abort('failed')
   })
-  await bloqueCampo(page, 'Precio de venta').locator('input[type="number"]').fill('200')
-  const boton = page.getByRole('button', { name: /guardar cambios/i })
+  await (await campoPrecio(page, 'venta')).fill('200')
+  const boton = page.getByRole('button', { name: /guardar precio/i })
   await boton.click()
   await expect(page.getByText('No hay conexión con el servidor.')).toBeVisible()
 

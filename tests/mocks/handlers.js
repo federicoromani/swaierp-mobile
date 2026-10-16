@@ -120,12 +120,17 @@ export function mockProductosEndpoint({ buscar, detalle, actualizarPrecio, regis
 /**
  * @param {{pendientesControlar?, ajustesFrecuentes?}} acciones
  */
-export function mockReportesEndpoint({ pendientesControlar, ajustesFrecuentes } = {}) {
+export function mockReportesEndpoint({ pendientesControlar, ajustesFrecuentes, categoriasPendientes } = {}) {
   const url = `${BASE}/api_reportes.php`
   return [
     http.get(url, ({ request }) => {
       const accion = leerAccionDeQuery(request)
-      const mapa = { pendientes_controlar: pendientesControlar, ajustes_frecuentes: ajustesFrecuentes }
+      const mapa = {
+        pendientes_controlar: pendientesControlar,
+        ajustes_frecuentes: ajustesFrecuentes,
+        // Filtro opcional de ReportesView: sin mock explícito, lista vacía.
+        categorias_pendientes: categoriasPendientes ?? (() => HttpResponse.json({ success: true, items: [] })),
+      }
       if (!(accion in mapa) || mapa[accion] === undefined) {
         return accionNoMockeada(accion)
       }

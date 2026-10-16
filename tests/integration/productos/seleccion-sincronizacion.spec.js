@@ -14,6 +14,7 @@ import { esperarQue } from '../../mocks/wait-helpers'
 import { useAuthStore } from '../../../src/stores/auth'
 import { useProductosStore } from '../../../src/stores/productos'
 import BuscarView from '../../../src/views/BuscarView.vue'
+import { inputVenta, inputContado } from '../../mocks/producto-card-helpers'
 
 async function montarBuscarView() {
   const auth = useAuthStore()
@@ -71,16 +72,12 @@ describe('BuscarView: sincronización SearchBar ↔ ProductoCard vía productos 
     await productos.seleccionar(101)
     await wrapper.vm.$nextTick()
 
-    const inputPrecio = wrapper.find('input[type="number"].w-28, input.text-right')
-    // El input de precio de venta es el único con clases text-right; si el
-    // selector de arriba no matchea por el orden de clases, se busca por
-    // posición conocida del layout (precio de venta es el 3er number input).
-    const inputsNumero = wrapper.findAll('input[type="number"]')
-    const inputPrecioVenta = inputsNumero[inputsNumero.length - 1]
+    const inputPrecioVenta = await inputVenta(wrapper)
     expect(Number(inputPrecioVenta.element.value)).toBe(1201)
 
-    // El usuario edita el precio a mano, sin guardar.
+    // El usuario edita el precio y lo contado a mano, sin guardar.
     await inputPrecioVenta.setValue(9999)
+    await inputContado(wrapper).setValue(33)
     expect(Number(inputPrecioVenta.element.value)).toBe(9999)
 
     // Se vuelve a seleccionar el MISMO producto (ej. reentra a la pantalla,
@@ -89,10 +86,11 @@ describe('BuscarView: sincronización SearchBar ↔ ProductoCard vía productos 
     await productos.seleccionar(101)
     await wrapper.vm.$nextTick()
 
-    // El watch está keyeado por prod_id, no por el objeto `actual` entero:
-    // no debe pisar lo que el usuario tenía tipeado.
-    const inputsNumeroDespues = wrapper.findAll('input[type="number"]')
-    expect(Number(inputsNumeroDespues[inputsNumeroDespues.length - 1].element.value)).toBe(9999)
+    // El watch está keyeado por prod_id, no por el objeto `actual` entero, y
+    // el skeleton solo aparece si se carga OTRO producto: no se desmonta la
+    // card ni se pisa lo que el usuario tenía tipeado.
+    expect(Number((await inputVenta(wrapper)).element.value)).toBe(9999)
+    expect(Number(inputContado(wrapper).element.value)).toBe(33)
   })
 
   it('seleccionar() con red caída hace fallback a catalogoCache si el producto ya estaba cacheado', async () => {

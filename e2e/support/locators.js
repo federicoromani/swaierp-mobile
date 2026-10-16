@@ -1,11 +1,32 @@
-/**
- * Locator robusto para el bloque de un campo de ProductoCard.vue (no hay
- * `<label for=id>`, ver docs/testing/plan-agente-3-e2e.md §0.3): acota por
- * la clase compartida de los 3 bloques (`bg-slate-50`) + el texto del label
- * que contienen. Un locator ingenuo como `page.locator('div', {hasText})`
- * matchea también los ancestros (el texto burbujea hacia arriba), por eso
- * se ancla a la clase CSS específica de cada bloque en vez de al texto solo.
- */
-export function bloqueCampo(page, textoLabel) {
-  return page.locator('.bg-slate-50', { has: page.locator('label', { hasText: textoLabel }) })
+// Locators de ProductoCard.vue por nombre accesible (aria-label / <label
+// for>), no por clases ni posición: así un cambio de layout de la card no
+// rompe todos los specs a la vez.
+
+/** Campo "Contado" del bloque de conteo. */
+export function campoContado(page) {
+  return page.getByLabel('Stock contado')
+}
+
+/** La sección "Precio y margen" es colapsable: la abre si hace falta. */
+export async function abrirPrecio(page) {
+  const boton = page.getByRole('button', { name: /precio y margen/i })
+  if ((await boton.getAttribute('aria-expanded')) !== 'true') {
+    await boton.click()
+  }
+}
+
+/** @param {'costo'|'venta'} cual */
+export async function campoPrecio(page, cual) {
+  await abrirPrecio(page)
+  return page.getByLabel(cual === 'costo' ? 'Precio de costo' : 'Precio de venta', { exact: true })
+}
+
+/** Sección completa de precio y margen (para capturas visuales). */
+export function seccionPrecio(page) {
+  return page.getByRole('region', { name: 'Precio y margen' })
+}
+
+/** Botón principal de la card: "Coincide: N u" / "Guardar conteo|precio|conteo y precio". */
+export function botonPrincipal(page) {
+  return page.getByRole('button', { name: /^(coincide|guardar)/i })
 }

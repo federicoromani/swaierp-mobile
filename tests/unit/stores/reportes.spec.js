@@ -89,7 +89,7 @@ describe('stores/reportes', () => {
 
       await reportes.cargarPendientes(20)
 
-      expect(reportesService.pendientesControlar).toHaveBeenCalledWith(7, 20, 20)
+      expect(reportesService.pendientesControlar).toHaveBeenCalledWith(7, 20, 20, null)
     })
   })
 
@@ -207,7 +207,7 @@ describe('stores/reportes', () => {
       reportes.pendientes = { items: [], total: 3 }
 
       reportes.marcarContado(99, undefined)
-      reportes.marcarContado(99, '05/07/2026')
+      reportes.marcarContado(99, 'ayer')
 
       expect(reportes.pendientes.total).toBe(3)
     })
@@ -219,6 +219,67 @@ describe('stores/reportes', () => {
       reportes.marcarContado(99, null)
 
       expect(reportes.pendientes.total).toBe(0)
+    })
+  })
+  describe('filtro por categoría', () => {
+    it('cargarCategorias() guarda las categorías con pendientes', async () => {
+      reportesService.categoriasPendientes.mockResolvedValue({
+        success: true,
+        items: [{ categoria_id: 5, nombre: 'Fijaciones', pendientes: 8 }],
+      })
+      const reportes = useReportesStore()
+
+      await reportes.cargarCategorias()
+
+      expect(reportesService.categoriasPendientes).toHaveBeenCalledWith(7)
+      expect(reportes.categorias).toEqual([{ categoria_id: 5, nombre: 'Fijaciones', pendientes: 8 }])
+    })
+
+    it('filtrarPorCategoria() vacía la lista y recarga desde 0 con el filtro', async () => {
+      reportesService.pendientesControlar.mockResolvedValue({ success: true, items: [{ prod_id: 9 }], total: 1 })
+      const reportes = useReportesStore()
+      reportes.pendientes = { items: [{ prod_id: 1 }, { prod_id: 2 }], total: 30 }
+
+      await reportes.filtrarPorCategoria(5)
+
+      expect(reportes.filtroCategoria).toBe(5)
+      expect(reportesService.pendientesControlar).toHaveBeenCalledWith(7, 20, 0, 5)
+      expect(reportes.pendientes).toEqual({ items: [{ prod_id: 9 }], total: 1 })
+      expect(reportes.pendientesCargados).toBe(true)
+    })
+
+    it('filtrar por la misma categoría ya cargada no vuelve a pedir', async () => {
+      reportesService.pendientesControlar.mockResolvedValue({ success: true, items: [], total: 0 })
+      const reportes = useReportesStore()
+      await reportes.filtrarPorCategoria(5)
+      reportesService.pendientesControlar.mockClear()
+
+      await reportes.filtrarPorCategoria(5)
+
+      expect(reportesService.pendientesControlar).not.toHaveBeenCalled()
+    })
+
+    it('marcarContado() también descuenta la categoría del producto (y la saca si llega a 0)', () => {
+      const reportes = useReportesStore()
+      reportes.pendientes = { items: [{ prod_id: 1, categoria_id: 5 }], total: 3 }
+      reportes.categorias = [
+        { categoria_id: 5, nombre: 'Fijaciones', pendientes: 1 },
+        { categoria_id: 6, nombre: 'Pinturería', pendientes: 2 },
+      ]
+
+      reportes.marcarContado(1, undefined)
+
+      expect(reportes.categorias).toEqual([{ categoria_id: 6, nombre: 'Pinturería', pendientes: 2 }])
+    })
+
+    it('con filtro activo, un producto pendiente de OTRA categoría no descuenta el total filtrado', () => {
+      const reportes = useReportesStore()
+      reportes.filtroCategoria = 5
+      reportes.pendientes = { items: [], total: 4 }
+
+      reportes.marcarContado(99, null, 6)
+
+      expect(reportes.pendientes.total).toBe(4)
     })
   })
 })

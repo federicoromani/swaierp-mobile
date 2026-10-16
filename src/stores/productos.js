@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import * as productosService from '../services/productosService'
 import { db } from '../offline/db'
 import { useReportesStore } from './reportes'
@@ -9,6 +9,14 @@ export const useProductosStore = defineStore('productos', () => {
   const recientes = ref([])
   const actual = ref(null)
   const cargando = ref(false)
+  // Solo la carga del detalle (seleccionar). El skeleton se muestra solo si
+  // se está cargando OTRO producto: volver a elegir el mismo (p. ej. desde
+  // Recientes) no debe desmontar la card y perder lo que se estaba tipeando.
+  const cargandoDetalle = ref(false)
+  const seleccionandoId = ref(null)
+  const cargandoOtroProducto = computed(
+    () => cargandoDetalle.value && seleccionandoId.value !== actual.value?.prod_id
+  )
   const error = ref('')
 
   async function buscar(query) {
@@ -44,6 +52,8 @@ export const useProductosStore = defineStore('productos', () => {
 
   async function seleccionar(prodId) {
     cargando.value = true
+    cargandoDetalle.value = true
+    seleccionandoId.value = prodId
     error.value = ''
     try {
       const data = await productosService.detalle(prodId)
@@ -61,6 +71,7 @@ export const useProductosStore = defineStore('productos', () => {
       }
     } finally {
       cargando.value = false
+      cargandoDetalle.value = false
     }
   }
 
@@ -80,7 +91,8 @@ export const useProductosStore = defineStore('productos', () => {
   async function registrarConteo(prodId, stockContado) {
     // ultimo_conteo previo: con eso "Pendientes de controlar" sabe si este
     // conteo lo saca de la lista aunque no esté en la página cargada.
-    const conteoAnterior = actual.value?.prod_id === prodId ? actual.value.ultimo_conteo : undefined
+    const previo = actual.value?.prod_id === prodId ? actual.value : null
+    const conteoAnterior = previo ? previo.ultimo_conteo : undefined
     const data = await productosService.registrarConteo(prodId, stockContado)
     if (!data.success) {
       throw new Error(data.error || 'No se pudo registrar el conteo.')
@@ -91,7 +103,7 @@ export const useProductosStore = defineStore('productos', () => {
       actual.value = data
       db.catalogoCache.put(data)
     }
-    useReportesStore().marcarContado(prodId, conteoAnterior)
+    useReportesStore().marcarContado(prodId, conteoAnterior, previo?.categoria_id)
     return data
   }
 
@@ -100,6 +112,8 @@ export const useProductosStore = defineStore('productos', () => {
     recientes,
     actual,
     cargando,
+    cargandoDetalle,
+    cargandoOtroProducto,
     error,
     buscar,
     seleccionar,

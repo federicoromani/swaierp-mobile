@@ -11,6 +11,8 @@ const routes = [
     meta: { requiresAuth: false },
   },
   { path: '/buscar', name: 'buscar', component: () => import('../views/BuscarView.vue') },
+  // Modo conteo: pantalla enfocada, sin tab bar (se sale con "Salir").
+  { path: '/contar', name: 'contar', component: () => import('../views/ConteoView.vue'), meta: { sinTabBar: true } },
   {
     path: '/importar',
     name: 'importar',

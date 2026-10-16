@@ -1,9 +1,10 @@
-// Navegación cruzada Reportes → producto (ReportesView.irAProducto): llama
+// Navegación cruzada Reportes → producto. Desde "Pendientes de controlar",
+// tocar un producto abre el MODO CONTEO en ese producto (/contar?desde=ID).
+// Desde "Ajustes frecuentes" (ReportesView.irAProducto) llama
 // `productos.seleccionar(prodId)` SIN await y ENSEGUIDA hace
 // `router.push('/buscar')` (hallazgo de discovery #10) — la navegación
 // ocurre antes de que resuelva el detalle. Se prueba con un RouterView real
-// para que la navegación efectivamente intercambie el componente montado
-// (de ReportesView a BuscarView), no solo llamando al handler a mano.
+// para que la navegación efectivamente intercambie el componente montado.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mount } from '@vue/test-utils'
@@ -39,7 +40,7 @@ describe('Reportes → producto: navegación cruzada vía productos store', () =
     io.restaurar()
   })
 
-  it('click en un pendiente navega a /buscar y, cuando resuelve el detalle (después de navegar), ProductoCard lo muestra', async () => {
+  it('click en un pendiente abre el modo conteo en ese producto y, cuando resuelve el detalle, ProductoCard lo muestra', async () => {
     server.use(
       ...mockReportesEndpoint({
         pendientesControlar: () =>
@@ -61,12 +62,12 @@ describe('Reportes → producto: navegación cruzada vía productos store', () =
     const item = wrapper.findAll('button').find((b) => b.text().includes('Yerba pendiente'))
     await item.trigger('click')
 
-    // La navegación ya pasó, y en ese instante el detalle todavía puede no
-    // haber llegado (seleccionar() no se esperó).
-    await esperarQue(() => expect(router.currentRoute.value.path).toBe('/buscar'))
+    await esperarQue(() => expect(router.currentRoute.value.path).toBe('/contar'))
+    expect(router.currentRoute.value.query.desde).toBe('707')
 
     await esperarQue(() => expect(productos.actual?.prod_id).toBe(707))
-    expect(wrapper.text()).toContain('Yerba pendiente')
+    await esperarQue(() => expect(wrapper.text()).toContain('Modo conteo'))
+    expect(wrapper.find('h2').text()).toBe('Yerba pendiente')
   })
 
   it('mismo flujo desde "Ajustes frecuentes"', async () => {
@@ -97,7 +98,7 @@ describe('Reportes → producto: navegación cruzada vía productos store', () =
     await esperarQue(() => expect(productos.actual?.prod_id).toBe(808))
   })
 
-  it('si seleccionar() falla (red caída) durante la navegación, BuscarView no crashea y muestra productos.error', async () => {
+  it('si el detalle falla (red caída) en el modo conteo, no muestra otro producto: error + "Reintentar"', async () => {
     server.use(
       ...mockReportesEndpoint({
         pendientesControlar: () =>
@@ -112,8 +113,10 @@ describe('Reportes → producto: navegación cruzada vía productos store', () =
     const item = wrapper.findAll('button').find((b) => b.text().includes('Sin conexión'))
     await item.trigger('click')
 
-    await esperarQue(() => expect(router.currentRoute.value.path).toBe('/buscar'))
+    await esperarQue(() => expect(router.currentRoute.value.path).toBe('/contar'))
     await esperarQue(() => expect(productos.error).toBe('No hay conexión con el servidor.'))
-    expect(wrapper.text()).toContain('No hay conexión con el servidor.')
+    await esperarQue(() => expect(wrapper.text()).toContain('No hay conexión con el servidor.'))
+    expect(wrapper.text()).toContain('Reintentar')
+    expect(wrapper.find('input[aria-label="Stock contado"]').exists()).toBe(false)
   })
 })

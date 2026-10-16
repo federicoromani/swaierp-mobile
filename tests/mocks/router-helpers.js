@@ -27,6 +27,7 @@ import LoginView from '../../src/views/LoginView.vue'
 import BuscarView from '../../src/views/BuscarView.vue'
 import ImportarView from '../../src/views/ImportarView.vue'
 import ReportesView from '../../src/views/ReportesView.vue'
+import ConteoView from '../../src/views/ConteoView.vue'
 
 /**
  * Para tests que verifican EL GUARD REAL (src/router/index.js) — boot desde
@@ -80,6 +81,7 @@ export async function crearRouterLiviano(rutaInicial = '/login') {
       { path: '/', redirect: '/buscar' },
       { path: '/login', name: 'login', component: LoginView, meta: { requiresAuth: false } },
       { path: '/buscar', name: 'buscar', component: BuscarView },
+      { path: '/contar', name: 'contar', component: ConteoView, meta: { sinTabBar: true } },
       { path: '/importar', name: 'importar', component: ImportarView },
       { path: '/reportes', name: 'reportes', component: ReportesView },
     ],

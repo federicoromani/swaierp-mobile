@@ -16,6 +16,7 @@ function crearRouterDeTest() {
     routes: [
       { path: '/buscar', name: 'buscar', component: { template: '<div/>' } },
       { path: '/reportes', name: 'reportes', component: { template: '<div/>' } },
+      { path: '/contar', name: 'contar', component: { template: '<div/>' } },
     ],
   })
 }
@@ -73,14 +74,14 @@ describe('views/BuscarView', () => {
     expect(conActual.wrapper.text()).not.toContain('Buscá un producto')
   })
 
-  it('click en "Ver" del banner navega a /reportes', async () => {
+  it('click en "Contar" del banner abre el modo conteo', async () => {
     const { wrapper, router } = await montar({ pendientesTotal: 3 })
 
-    const boton = wrapper.findAll('button').find((b) => b.text().includes('Ver'))
+    const boton = wrapper.findAll('button').find((b) => b.text().includes('Contar'))
     await boton.trigger('click')
     await flushPromises()
 
-    expect(router.currentRoute.value.path).toBe('/reportes')
+    expect(router.currentRoute.value.path).toBe('/contar')
   })
 
   it('renderiza HistorialProducto con productos.actual.historial solo si hay producto actual', async () => {

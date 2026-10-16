@@ -26,6 +26,7 @@ import { useAuthStore } from '../../../src/stores/auth'
 import { useProductosStore } from '../../../src/stores/productos'
 import { useUiStore } from '../../../src/stores/ui'
 import ProductoCard from '../../../src/components/ProductoCard.vue'
+import { inputVenta, botonPorTexto } from '../../mocks/producto-card-helpers'
 
 function montar(productoInicial) {
   const auth = useAuthStore()
@@ -36,13 +37,8 @@ function montar(productoInicial) {
   return { wrapper, productos, ui: useUiStore() }
 }
 
-function inputPrecioVenta(wrapper) {
-  const inputs = wrapper.findAll('input[type="number"]')
-  return inputs[inputs.length - 1]
-}
-
 function botonGuardarPrecio(wrapper) {
-  return wrapper.findAll('button').find((b) => b.text().includes('Guardar cambios'))
+  return botonPorTexto(wrapper, 'Guardar precio')
 }
 
 async function leerBody(request) {
@@ -71,7 +67,7 @@ describe('ProductoCard: guardar precio', () => {
     )
 
     const { wrapper, productos, ui } = montar(productoEjemplo({ prod_id: 101, costo: 800, precio_venta: 1200 }))
-    await inputPrecioVenta(wrapper).setValue(1500)
+    await (await inputVenta(wrapper)).setValue(1500)
     await botonGuardarPrecio(wrapper).trigger('click')
 
     await esperarQue(() => expect(productos.actual.precio_venta).toBe(1500))
@@ -91,7 +87,7 @@ describe('ProductoCard: guardar precio', () => {
 
     const productoInicial = productoEjemplo({ prod_id: 101, costo: 800, precio_venta: 1200 })
     const { wrapper, productos, ui } = montar(productoInicial)
-    await inputPrecioVenta(wrapper).setValue(500)
+    await (await inputVenta(wrapper)).setValue(500)
     await botonGuardarPrecio(wrapper).trigger('click')
 
     await esperarQue(() => expect(ui.toast?.tipo).toBe('error'))
@@ -102,7 +98,7 @@ describe('ProductoCard: guardar precio', () => {
     // toEqual (no toBe): Pinia envuelve el estado en un proxy reactivo, así
     // que la referencia nunca es la misma aunque no haya habido reasignación.
     expect(productos.actual).toEqual(productoInicial)
-    expect(Number(inputPrecioVenta(wrapper).element.value)).toBe(500)
+    expect(Number((await inputVenta(wrapper)).element.value)).toBe(500)
     expect(wrapper.text()).not.toContain('Guardando...')
   })
 
@@ -110,7 +106,7 @@ describe('ProductoCard: guardar precio', () => {
     server.use(...mockProductosEndpoint({ actualizarPrecio: () => HttpResponse.error() }))
 
     const { wrapper, ui } = montar(productoEjemplo({ prod_id: 101, costo: 800, precio_venta: 1200 }))
-    await inputPrecioVenta(wrapper).setValue(1500)
+    await (await inputVenta(wrapper)).setValue(1500)
     await botonGuardarPrecio(wrapper).trigger('click')
 
     await esperarQue(() => expect(ui.toast?.tipo).toBe('error'))
@@ -125,7 +121,7 @@ describe('ProductoCard: guardar precio', () => {
     )
 
     const { wrapper, ui } = montar(productoEjemplo({ prod_id: 101, costo: 800, precio_venta: 1200 }))
-    await inputPrecioVenta(wrapper).setValue(1500)
+    await (await inputVenta(wrapper)).setValue(1500)
     await botonGuardarPrecio(wrapper).trigger('click')
 
     await esperarQue(() => expect(ui.toast?.tipo).toBe('error'))
@@ -147,11 +143,11 @@ describe('ProductoCard: guardar precio', () => {
     )
 
     const { wrapper, productos, ui } = montar(productoEjemplo({ prod_id: 101, costo: 800, precio_venta: 1200 }))
-    await inputPrecioVenta(wrapper).setValue(500)
+    await (await inputVenta(wrapper)).setValue(500)
     await botonGuardarPrecio(wrapper).trigger('click')
     await esperarQue(() => expect(ui.toast?.tipo).toBe('error'))
 
-    await inputPrecioVenta(wrapper).setValue(1500)
+    await (await inputVenta(wrapper)).setValue(1500)
     await botonGuardarPrecio(wrapper).trigger('click')
     await esperarQue(() => expect(ui.toast?.tipo).toBe('success'))
 
@@ -159,7 +155,7 @@ describe('ProductoCard: guardar precio', () => {
     expect(productos.actual.precio_venta).toBe(1500)
   })
 
-  it('doble-submit real: dos clicks en "Guardar cambios" sin esperar entre medio — una sola request', async () => {
+  it('doble-submit real: dos clicks en "Guardar precio" sin esperar entre medio — una sola request', async () => {
     let llamadas = 0
     server.use(
       ...mockProductosEndpoint({
@@ -171,7 +167,7 @@ describe('ProductoCard: guardar precio', () => {
     )
 
     const { wrapper, productos } = montar(productoEjemplo({ prod_id: 101, costo: 800, precio_venta: 1200 }))
-    await inputPrecioVenta(wrapper).setValue(1500)
+    await (await inputVenta(wrapper)).setValue(1500)
 
     const boton = botonGuardarPrecio(wrapper)
     const p1 = boton.trigger('click')
@@ -196,7 +192,7 @@ describe('ProductoCard: guardar precio', () => {
     )
 
     const { wrapper, productos } = montar(productoEjemplo({ prod_id: 101, nombre: 'Producto A', costo: 800, precio_venta: 1200 }))
-    await inputPrecioVenta(wrapper).setValue(1500)
+    await (await inputVenta(wrapper)).setValue(1500)
     const guardado = botonGuardarPrecio(wrapper).trigger('click')
 
     // Mientras la respuesta de A todavía está en vuelo, el usuario navega a

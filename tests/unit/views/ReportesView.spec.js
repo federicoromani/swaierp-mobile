@@ -30,18 +30,26 @@ function crearRouterDeTest() {
     routes: [
       { path: '/buscar', name: 'buscar', component: { template: '<div/>' } },
       { path: '/reportes', name: 'reportes', component: { template: '<div/>' } },
+      { path: '/contar', name: 'contar', component: { template: '<div/>' } },
     ],
   })
 }
 
-async function montar({ pendientes = { items: [], total: 0 }, ajustes = { items: [], total: 0 }, cargando = false } = {}) {
+async function montar({
+  pendientes = { items: [], total: 0 },
+  ajustes = { items: [], total: 0 },
+  cargando = false,
+  pendientesCargados = false,
+  filtroCategoria = null,
+  categorias = [],
+} = {}) {
   const router = crearRouterDeTest()
   await router.push('/reportes')
   await router.isReady()
   const pinia = createTestingPinia({
     stubActions: true,
     initialState: {
-      reportes: { pendientes, ajustes, cargando },
+      reportes: { pendientes, ajustes, cargando, pendientesCargados, filtroCategoria, categorias },
       productos: { resultados: [], recientes: [], actual: null, cargando: false, error: '' },
     },
   })
@@ -152,8 +160,8 @@ describe('views/ReportesView', () => {
     expect(reportes.cargarAjustes).toHaveBeenLastCalledWith(1)
   })
 
-  it('click en un producto pendiente selecciona el producto y navega a /buscar', async () => {
-    const { wrapper, productos, router } = await montar({
+  it('click en un producto pendiente abre el modo conteo en ese producto', async () => {
+    const { wrapper, router } = await montar({
       pendientes: { items: [{ prod_id: 42, nombre: 'Tornillo', ultimo_conteo: null }], total: 1 },
     })
 
@@ -161,8 +169,8 @@ describe('views/ReportesView', () => {
     await boton.trigger('click')
     await flushPromises()
 
-    expect(productos.seleccionar).toHaveBeenCalledWith(42)
-    expect(router.currentRoute.value.name).toBe('buscar')
+    expect(router.currentRoute.value.path).toBe('/contar')
+    expect(router.currentRoute.value.query).toEqual({ desde: '42' })
   })
 
   it('click en un producto con ajustes selecciona el producto y navega a /buscar', async () => {
@@ -184,5 +192,65 @@ describe('views/ReportesView', () => {
     const { wrapper } = await montar({ pendientes: { items: [], total: 12 } })
 
     expect(wrapper.text()).toContain('12')
+  })
+  describe('pendientes: modo conteo, urgencia y categorías', () => {
+    it('si la lista ya estaba cargada (volviendo del modo conteo), no la recarga', async () => {
+      const { reportes } = await montar({ pendientesCargados: true, pendientes: { items: [], total: 3 } })
+      expect(reportes.cargarPendientes).not.toHaveBeenCalled()
+      expect(reportes.cargarCategorias).toHaveBeenCalled()
+    })
+
+    it('"Empezar a contar (N)" abre el modo conteo con el filtro de categoría activo', async () => {
+      const { wrapper, router } = await montar({
+        pendientes: { items: [{ prod_id: 1, nombre: 'A', ultimo_conteo: null }], total: 12 },
+        filtroCategoria: 5,
+      })
+
+      const boton = wrapper.findAll('button').find((b) => b.text().includes('Empezar a contar'))
+      expect(boton.text()).toContain('(12)')
+      await boton.trigger('click')
+      await flushPromises()
+
+      expect(router.currentRoute.value.path).toBe('/contar')
+      expect(router.currentRoute.value.query).toEqual({ categoria: '5' })
+    })
+
+    it('sin pendientes no muestra "Empezar a contar"', async () => {
+      const { wrapper } = await montar({ pendientes: { items: [], total: 0 } })
+      expect(wrapper.text()).not.toContain('Empezar a contar')
+    })
+
+    it('cada fila muestra la categoría (último tramo) y la urgencia: "nunca" en rojo, días relativos', async () => {
+      const haceDias = (n) => new Date(Date.now() - n * 86400000).toISOString().replace('T', ' ').slice(0, 19)
+      const { wrapper } = await montar({
+        pendientes: {
+          items: [
+            { prod_id: 1, nombre: 'Nunca contado', ultimo_conteo: null, categoria: 'Ferretería > Fijaciones' },
+            { prod_id: 2, nombre: 'Vencido', ultimo_conteo: haceDias(12) },
+          ],
+          total: 2,
+        },
+      })
+      const filas = wrapper.findAll('button').filter((b) => /Nunca contado|Vencido/.test(b.text()))
+      expect(filas[0].text()).toContain('Fijaciones')
+      expect(filas[0].text()).not.toContain('Ferretería >')
+      expect(filas[0].find('.bg-red-100').text()).toBe('nunca')
+      expect(filas[1].find('.bg-amber-100').text()).toBe('hace 12 días')
+    })
+
+    it('chips de categoría: "Todas" + cada categoría con su cantidad; tocar una filtra', async () => {
+      const { wrapper, reportes } = await montar({
+        categorias: [
+          { categoria_id: 5, nombre: 'Ferretería > Fijaciones', pendientes: 8 },
+          { categoria_id: 6, nombre: 'Pinturería', pendientes: 4 },
+        ],
+      })
+
+      expect(wrapper.text()).toContain('Todas (12)')
+      const chip = wrapper.findAll('button').find((b) => b.text().includes('Fijaciones (8)'))
+      await chip.trigger('click')
+
+      expect(reportes.filtrarPorCategoria).toHaveBeenCalledWith(5)
+    })
   })
 })

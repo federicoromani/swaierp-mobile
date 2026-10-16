@@ -1,13 +1,13 @@
-// Journey: Buscar producto -> ver detalle -> editar precio y/o stock con un
-// solo "Guardar cambios" (manda solo lo que cambió). El journey de mayor uso real de la app
-// (empleado con el celular en el piso de venta). Ver
+// Journey: Buscar producto -> ver detalle -> contar (y/o editar precio) con
+// un solo botón principal que manda solo lo que cambió. El journey de mayor
+// uso real de la app (empleado con el celular en el piso de venta). Ver
 // docs/testing/plan-agente-3-e2e.md §1 (P0).
 import { test, expect } from '@playwright/test'
 import { mockApi, leerQueryParams, leerBodyUrlEncoded, contarRequests } from './support/mockApi.js'
 import { PRODUCTOS_URL, REPORTES_URL } from './support/urls.js'
 import { productoResultado, productoDetalle } from './support/fixtures.js'
 import { loginComo } from './support/login.js'
-import { bloqueCampo } from './support/locators.js'
+import { campoContado, campoPrecio, botonPrincipal } from './support/locators.js'
 
 test.use({ serviceWorkers: 'block' })
 
@@ -33,23 +33,30 @@ async function buscarYSeleccionar(page, { resultado = productoResultado(), detal
   return { resultado, detalle }
 }
 
-test('buscar producto y ver el detalle completo', async ({ page }) => {
+function hoyIso() {
+  const d = new Date()
+  const dd = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${dd(d.getMonth() + 1)}-${dd(d.getDate())} 10:00:00`
+}
+
+test('buscar producto y ver el detalle: sistema, contado vacío y precio en su sección', async ({ page }) => {
   const detalle = productoDetalle({ codigo: 'TOR-034', stock_actual: 25, costo: 100, precio_venta: 155 })
   await buscarYSeleccionar(page, { detalle })
 
-  await expect(page.getByText('Código: TOR-034')).toBeVisible()
-  await expect(bloqueCampo(page, 'Stock actual').locator('input[type="number"]')).toHaveValue('25')
-  await expect(bloqueCampo(page, 'Precio de costo').locator('input[type="number"]')).toHaveValue('100')
-  await expect(bloqueCampo(page, 'Precio de venta').locator('input[type="number"]')).toHaveValue('155')
+  await expect(page.getByText(/TOR-034/)).toBeVisible()
+  await expect(page.getByText('Sistema')).toBeVisible()
+  await expect(campoContado(page)).toHaveValue('')
+  await expect(campoContado(page)).toHaveAttribute('placeholder', '25')
+  await expect(botonPrincipal(page)).toHaveText(/Coincide: 25/)
+  await expect(await campoPrecio(page, 'costo')).toHaveValue('100')
+  await expect(await campoPrecio(page, 'venta')).toHaveValue('155')
 })
 
 test('editar precio: guarda y el margen mostrado se recalcula con el valor que persistió', async ({ page }) => {
   await buscarYSeleccionar(page, { detalle: productoDetalle({ costo: 100, precio_venta: 155 }) })
 
-  const costoInput = bloqueCampo(page, 'Precio de costo').locator('input[type="number"]')
-  const ventaInput = bloqueCampo(page, 'Precio de venta').locator('input[type="number"]')
-  await costoInput.fill('100')
-  await ventaInput.fill('250')
+  await (await campoPrecio(page, 'costo')).fill('100')
+  await (await campoPrecio(page, 'venta')).fill('250')
 
   await mockApi(page, PRODUCTOS_URL, async (route, request) => {
     const body = leerBodyUrlEncoded(request)
@@ -59,25 +66,23 @@ test('editar precio: guarda y el margen mostrado se recalcula con el valor que p
     return { json: productoDetalle({ costo: 100, precio_venta: 250 }) }
   })
 
-  await page.getByRole('button', { name: /guardar cambios/i }).click()
+  await page.getByRole('button', { name: /guardar precio/i }).click()
 
   await expect(page.getByText('Precio actualizado.')).toBeVisible()
   // (250-100)/250*100 = 60.0% -- formateado es-AR con coma decimal.
-  await expect(page.getByText('60,0%')).toBeVisible()
+  await expect(page.getByText('60,0%').first()).toBeVisible()
 })
 
-test('editar stock: stepper + tipeo directo, solo registra el conteo si el precio no cambió', async ({ page }) => {
+test('contar: stepper desde el sistema + tipeo directo, muestra la diferencia y solo registra el conteo', async ({ page }) => {
   await buscarYSeleccionar(page, { detalle: productoDetalle({ stock_actual: 25 }) })
 
-  const bloqueStock = bloqueCampo(page, 'Stock actual')
-  const stockInput = bloqueStock.locator('input[type="number"]')
-  await expect(stockInput).toHaveValue('25')
+  await page.getByRole('button', { name: 'Sumar uno' }).click()
+  await page.getByRole('button', { name: 'Sumar uno' }).click()
+  await expect(campoContado(page)).toHaveValue('27')
+  await expect(page.getByText(/Sobran 2/)).toBeVisible()
 
-  await bloqueStock.getByRole('button', { name: '+' }).click()
-  await bloqueStock.getByRole('button', { name: '+' }).click()
-  await expect(stockInput).toHaveValue('27')
-
-  await stockInput.fill('30')
+  await campoContado(page).fill('30')
+  await expect(page.getByText(/Sobran 5/)).toBeVisible()
 
   await mockApi(page, PRODUCTOS_URL, async (route, request) => {
     const body = leerBodyUrlEncoded(request)
@@ -86,12 +91,14 @@ test('editar stock: stepper + tipeo directo, solo registra el conteo si el preci
     return { json: { ...productoDetalle({ stock_actual: 30 }), diferencia: 5 } }
   })
 
-  await page.getByRole('button', { name: /guardar cambios/i }).click()
+  await page.getByRole('button', { name: /guardar conteo/i }).click()
   await expect(page.getByText('Conteo registrado: +5.')).toBeVisible()
-  await expect(stockInput).toHaveValue('30')
+  // Guardado: lo contado se vacía y el sistema pasa a decir 30.
+  await expect(campoContado(page)).toHaveValue('')
+  await expect(botonPrincipal(page)).toHaveText(/Coincide: 30/)
 })
 
-test('confirmar conteo: sin tocar nada, registra que el stock coincide y actualiza "Último conteo"', async ({ page }) => {
+test('coincide: sin tocar nada, registra que el stock coincide y actualiza "Último conteo"', async ({ page }) => {
   await buscarYSeleccionar(page, { detalle: productoDetalle({ stock_actual: 25, ultimo_conteo: null }) })
   await expect(page.getByText('Último conteo: nunca')).toBeVisible()
 
@@ -99,18 +106,18 @@ test('confirmar conteo: sin tocar nada, registra que el stock coincide y actuali
     const body = leerBodyUrlEncoded(request)
     expect(body.action).toBe('registrar_conteo')
     expect(body.stock_contado).toBe('25')
-    return { json: { ...productoDetalle({ stock_actual: 25, ultimo_conteo: '16/10/2026' }), diferencia: 0 } }
+    return { json: { ...productoDetalle({ stock_actual: 25, ultimo_conteo: hoyIso() }), diferencia: 0 } }
   })
 
-  await page.getByRole('button', { name: /confirmar conteo/i }).click()
+  await botonPrincipal(page).click()
   await expect(page.getByText('Conteo registrado: sin diferencias.')).toBeVisible()
-  await expect(page.getByText('Último conteo: 16/10/2026')).toBeVisible()
+  await expect(page.getByText('Último conteo: hoy')).toBeVisible()
 })
 
 test('caso negativo: precio de venta <= costo, el backend lo rechaza y no se aplica', async ({ page }) => {
   await buscarYSeleccionar(page, { detalle: productoDetalle({ costo: 100, precio_venta: 155 }) })
 
-  await bloqueCampo(page, 'Precio de venta').locator('input[type="number"]').fill('80')
+  await (await campoPrecio(page, 'venta')).fill('80')
 
   await mockApi(page, PRODUCTOS_URL, async (route, request) => {
     const q = leerQueryParams(request)
@@ -121,18 +128,18 @@ test('caso negativo: precio de venta <= costo, el backend lo rechaza y no se apl
     }
   })
 
-  await page.getByRole('button', { name: /guardar cambios/i }).click()
+  await page.getByRole('button', { name: /guardar precio/i }).click()
   await expect(page.getByText('El precio de venta no puede ser menor o igual al costo.')).toBeVisible()
   // El valor mostrado de precio de venta NO cambió a lo que hubiera devuelto
   // un éxito -- sigue siendo el 80 que el usuario tipeó, porque actual.value
   // del store no se pisa cuando success es false.
-  await expect(bloqueCampo(page, 'Precio de venta').locator('input[type="number"]')).toHaveValue('80')
+  await expect(await campoPrecio(page, 'venta')).toHaveValue('80')
 })
 
 test('caso negativo: API caída al guardar precio -- mensaje claro, el valor tipeado no se pierde', async ({ page }) => {
   await buscarYSeleccionar(page, { detalle: productoDetalle({ costo: 100, precio_venta: 155 }) })
 
-  await bloqueCampo(page, 'Precio de venta').locator('input[type="number"]').fill('200')
+  await (await campoPrecio(page, 'venta')).fill('200')
   await page.route(PRODUCTOS_URL, (route) => {
     const req = route.request()
     if (req.method() === 'OPTIONS') {
@@ -141,17 +148,17 @@ test('caso negativo: API caída al guardar precio -- mensaje claro, el valor tip
     return route.abort('failed')
   })
 
-  const boton = page.getByRole('button', { name: /guardar cambios/i })
+  const boton = page.getByRole('button', { name: /guardar precio/i })
   await boton.click()
 
   await expect(page.getByText('No hay conexión con el servidor.')).toBeVisible()
   await expect(boton).toBeEnabled()
-  await expect(bloqueCampo(page, 'Precio de venta').locator('input[type="number"]')).toHaveValue('200')
+  await expect(await campoPrecio(page, 'venta')).toHaveValue('200')
 })
 
-test('caso negativo: doble submit en "Guardar cambios" -- solo una request real', async ({ page }) => {
+test('caso negativo: doble submit en "Guardar precio" -- solo una request real', async ({ page }) => {
   await buscarYSeleccionar(page, { detalle: productoDetalle({ costo: 100, precio_venta: 155 }) })
-  await bloqueCampo(page, 'Precio de venta').locator('input[type="number"]').fill('200')
+  await (await campoPrecio(page, 'venta')).fill('200')
 
   const contador = contarRequests(page, PRODUCTOS_URL, 'POST')
   await mockApi(page, PRODUCTOS_URL, async (route, request) => {
@@ -161,7 +168,7 @@ test('caso negativo: doble submit en "Guardar cambios" -- solo una request real'
   })
 
   await page.evaluate(() => {
-    const botones = [...document.querySelectorAll('button')].filter((b) => b.textContent.includes('Guardar cambios'))
+    const botones = [...document.querySelectorAll('button')].filter((b) => b.textContent.includes('Guardar precio'))
     botones[0]?.click()
     botones[0]?.click()
   })
@@ -179,19 +186,19 @@ test('reiniciar: descarta los cambios sin guardar y vuelve a los valores del pro
   const reiniciar = page.getByRole('button', { name: 'Reiniciar valores' })
   await expect(reiniciar).toHaveCount(0)
 
-  await bloqueCampo(page, 'Stock actual').locator('input[type="number"]').fill('3')
-  await bloqueCampo(page, 'Precio de costo').locator('input[type="number"]').fill('200')
+  await campoContado(page).fill('3')
+  await (await campoPrecio(page, 'costo')).fill('200')
   // La venta acompaña al costo con la ganancia actual (55%).
-  await expect(bloqueCampo(page, 'Precio de venta').locator('input[type="number"]')).toHaveValue('310')
+  await expect(await campoPrecio(page, 'venta')).toHaveValue('310')
 
   await reiniciar.click()
 
-  await expect(bloqueCampo(page, 'Stock actual').locator('input[type="number"]')).toHaveValue('25')
-  await expect(bloqueCampo(page, 'Precio de costo').locator('input[type="number"]')).toHaveValue('100')
-  await expect(bloqueCampo(page, 'Precio de venta').locator('input[type="number"]')).toHaveValue('155')
+  await expect(campoContado(page)).toHaveValue('')
+  await expect(await campoPrecio(page, 'costo')).toHaveValue('100')
+  await expect(await campoPrecio(page, 'venta')).toHaveValue('155')
   await expect(reiniciar).toHaveCount(0)
-  // Sin cambios, el botón principal vuelve a ser "Confirmar conteo".
-  await expect(page.getByRole('button', { name: /confirmar conteo/i })).toBeVisible()
+  // Sin cambios, el botón principal vuelve a ser "Coincide".
+  await expect(botonPrincipal(page)).toHaveText(/Coincide: 25/)
 })
 
 test('caso negativo: búsqueda sin resultados', async ({ page }) => {

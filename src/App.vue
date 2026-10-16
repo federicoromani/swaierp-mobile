@@ -15,6 +15,8 @@ const tecladoAbierto = useTecladoVirtual()
 // El login (y cualquier vista futura marcada requiresAuth:false) no lleva
 // header ni tab bar del ERP.
 const mostrarChrome = computed(() => route.meta.requiresAuth !== false)
+// Pantallas enfocadas (modo conteo) tampoco llevan tab bar.
+const mostrarTabBar = computed(() => mostrarChrome.value && !route.meta.sinTabBar)
 
 function alCambiarRed() {
   ui.setNavegadorOnline(navigator.onLine)
@@ -46,7 +48,7 @@ onBeforeUnmount(() => {
       </div>
     </header>
 
-    <main class="p-4 max-w-lg mx-auto" :class="mostrarChrome ? 'pb-20' : ''">
+    <main class="p-4 max-w-lg mx-auto" :class="mostrarTabBar ? 'pb-20' : ''">
       <RouterView />
     </main>
 
@@ -64,7 +66,7 @@ onBeforeUnmount(() => {
       </div>
     </transition>
 
-    <TabBar v-if="mostrarChrome && !tecladoAbierto" />
+    <TabBar v-if="mostrarTabBar && !tecladoAbierto" />
   </div>
 </template>
 

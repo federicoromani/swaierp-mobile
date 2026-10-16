@@ -26,6 +26,7 @@ import { mockApi, leerQueryParams } from './support/mockApi.js'
 import { PRODUCTOS_URL, IMPORTACION_URL } from './support/urls.js'
 import { productoResultado, productoDetalle, proveedor, itemImportacionAplicable, itemImportacionNoAplicable } from './support/fixtures.js'
 import { loginComo } from './support/login.js'
+import { abrirPrecio, seccionPrecio } from './support/locators.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CSV_FIXTURE = path.join(__dirname, 'fixtures', 'lista-precios.csv')
@@ -37,13 +38,11 @@ const CSV_FIXTURE = path.join(__dirname, 'fixtures', 'lista-precios.csv')
 // criterio que los specs de journeys de negocio, ver plan §0.2).
 test.use({ serviceWorkers: 'block' })
 
-// Bloque que contiene el label "Precio de venta", el badge de margen y (si
-// aplica) el banner de advertencia -- combinación de clases única en la
-// pantalla (los otros dos bloques de ProductoCard usan "bg-slate-50 p-3
-// rounded-xl border", sin "space-y-3"), confirmada leyendo
-// src/components/ProductoCard.vue.
-function bloqueMargen(page) {
-  return page.locator('.bg-slate-50.rounded-xl.p-3.border.space-y-3')
+// Sección "Precio y margen" de ProductoCard (abierta): venta, costo, badge de
+// margen y, si aplica, el banner de advertencia.
+async function bloqueMargen(page) {
+  await abrirPrecio(page)
+  return seccionPrecio(page)
 }
 
 async function irADetalleConMargen(page, detalle) {
@@ -63,21 +62,23 @@ async function irADetalleConMargen(page, detalle) {
 test('ProductoCard: margen bajo -- badge rojo + banner de advertencia visible', async ({ page }) => {
   await irADetalleConMargen(
     page,
-    productoDetalle({ nombre: 'Visual Margen Bajo', costo: 100, precio_venta: 110 }) // (110-100)/110 = 9,1% < 30% default
+    productoDetalle({ nombre: 'Visual Margen Bajo', ultimo_ajuste_precio: null, costo: 100, precio_venta: 110 }) // (110-100)/110 = 9,1% < 30% default
   )
 
+  const bloque = await bloqueMargen(page)
   await expect(page.getByText('El margen quedó por debajo del mínimo definido.')).toBeVisible()
-  await expect(bloqueMargen(page)).toHaveScreenshot('producto-margen-bajo.png', { animations: 'disabled' })
+  await expect(bloque).toHaveScreenshot('producto-margen-bajo.png', { animations: 'disabled' })
 })
 
 test('ProductoCard: margen ok -- badge verde, sin banner de advertencia', async ({ page }) => {
   await irADetalleConMargen(
     page,
-    productoDetalle({ nombre: 'Visual Margen Ok', costo: 100, precio_venta: 200 }) // (200-100)/200 = 50% >= 30% default
+    productoDetalle({ nombre: 'Visual Margen Ok', ultimo_ajuste_precio: null, costo: 100, precio_venta: 200 }) // (200-100)/200 = 50% >= 30% default
   )
 
+  const bloque = await bloqueMargen(page)
   await expect(page.getByText('El margen quedó por debajo del mínimo definido.')).toHaveCount(0)
-  await expect(bloqueMargen(page)).toHaveScreenshot('producto-margen-ok.png', { animations: 'disabled' })
+  await expect(bloque).toHaveScreenshot('producto-margen-ok.png', { animations: 'disabled' })
 })
 
 test('ImportarView: checklist con ítems aplicables y no aplicables mezclados', async ({ page }) => {

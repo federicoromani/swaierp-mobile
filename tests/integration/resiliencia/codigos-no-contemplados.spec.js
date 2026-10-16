@@ -32,6 +32,7 @@ import { useReportesStore } from '../../../src/stores/reportes'
 import { useImportacionPreciosStore } from '../../../src/stores/importacionPrecios'
 import { useUiStore } from '../../../src/stores/ui'
 import ProductoCard from '../../../src/components/ProductoCard.vue'
+import { inputContado, inputVenta } from '../../mocks/producto-card-helpers'
 
 // El backend real (swaidemo/apps/api_*.php) no emite ninguno de estos hoy —
 // son los que un proxy/WAF/CDN podría llegar a inyectar delante.
@@ -54,14 +55,6 @@ function botonPorTexto(wrapper, texto) {
   return wrapper.findAll('button').find((b) => b.text().includes(texto))
 }
 
-// "Guardar cambios" solo se habilita si hay algo distinto a lo guardado.
-function inputStock(wrapper) {
-  return wrapper.findAll('input[type="number"]')[0]
-}
-
-function inputPrecioVenta(wrapper) {
-  return wrapper.findAll('input[type="number"]')[2]
-}
 
 describe('Resiliencia: códigos/errores no contemplados hoy por el backend', () => {
   let restaurarMultipart
@@ -103,8 +96,8 @@ describe('Resiliencia: códigos/errores no contemplados hoy por el backend', () 
         const { wrapper, ui } = montarProductoCard(productoEjemplo({ prod_id: 101, costo: 800, precio_venta: 1200 }))
         server.use(...mockProductosEndpoint({ actualizarPrecio: respuestaError(status, `Error simulado ${status}.`) }))
 
-        await inputPrecioVenta(wrapper).setValue(1500)
-        await botonPorTexto(wrapper, 'Guardar cambios').trigger('click')
+        await (await inputVenta(wrapper)).setValue(1500)
+        await botonPorTexto(wrapper, 'Guardar precio').trigger('click')
 
         await esperarQue(() => expect(ui.toast?.tipo).toBe('error'))
         expect(ui.toast.mensaje).toBe(`Error simulado ${status}.`)
@@ -118,8 +111,8 @@ describe('Resiliencia: códigos/errores no contemplados hoy por el backend', () 
         const { wrapper, ui } = montarProductoCard(productoEjemplo({ prod_id: 101, stock_actual: 24 }))
         server.use(...mockProductosEndpoint({ registrarConteo: respuestaError(status, `Error simulado ${status}.`) }))
 
-        await inputStock(wrapper).setValue(20)
-        await botonPorTexto(wrapper, 'Guardar cambios').trigger('click')
+        await inputContado(wrapper).setValue(20)
+        await botonPorTexto(wrapper, 'Guardar conteo').trigger('click')
 
         await esperarQue(() => expect(ui.toast?.tipo).toBe('error'))
         expect(ui.toast.mensaje).toBe(`Error simulado ${status}.`)
@@ -208,8 +201,8 @@ describe('Resiliencia: códigos/errores no contemplados hoy por el backend', () 
           })
         )
 
-        await inputPrecioVenta(wrapper).setValue(1500)
-        const boton = botonPorTexto(wrapper, 'Guardar cambios')
+        await (await inputVenta(wrapper)).setValue(1500)
+        const boton = botonPorTexto(wrapper, 'Guardar precio')
         await boton.trigger('click')
 
         // guardando.value = true se setea en guardar() antes de cualquier
@@ -229,8 +222,8 @@ describe('Resiliencia: códigos/errores no contemplados hoy por el backend', () 
       const { wrapper, ui } = montarProductoCard(productoEjemplo({ prod_id: 101, costo: 800, precio_venta: 1200 }))
       server.use(...mockProductosEndpoint({ actualizarPrecio: () => HttpResponse.json({ success: false }) }))
 
-      await inputPrecioVenta(wrapper).setValue(1500)
-      await botonPorTexto(wrapper, 'Guardar cambios').trigger('click')
+      await (await inputVenta(wrapper)).setValue(1500)
+      await botonPorTexto(wrapper, 'Guardar precio').trigger('click')
 
       await esperarQue(() => expect(ui.toast?.tipo).toBe('error'))
       // Fallback definido en productos.js actualizarPrecio(), no en el componente.

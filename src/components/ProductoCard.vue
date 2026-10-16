@@ -3,15 +3,26 @@ import { ref, computed, watch } from 'vue'
 import { useProductosStore } from '../stores/productos'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
+import { textoRelativo, urgenciaConteo } from '../utils/fechas'
+
+const emit = defineEmits(['guardado'])
 
 const productos = useProductosStore()
 const auth = useAuthStore()
 const ui = useUiStore()
 
-const stock = ref(0)
+// Lo contado arranca VACÍO, no precargado con el stock del sistema: un campo
+// que ya dice "25" invita a confirmar sin contar. Vacío + "Coincide: 25 u"
+// deja el caso más común en un toque, pero como decisión explícita.
+const contado = ref('')
 const costo = ref(0)
 const precioVenta = ref(0)
 const guardando = ref(false)
+const precioAbierto = ref(false)
+const envasesAbierto = ref(false)
+// cantidad de envases cerrados por presentación (id -> cantidad) + sueltas.
+const envases = ref({})
+const sueltas = ref('')
 // Ganancia como MARKUP sobre costo (igual que producto.prod_ganancia y la
 // "Ganancia (%)" de amproducto.php), no el margen sobre venta que se muestra.
 // Es el ancla de la sincronización: editar el costo recalcula la venta con
@@ -34,8 +45,14 @@ function cargarPrecio(p) {
       : calcularGanancia(Number(p.costo) || 0, Number(p.precio_venta) || 0)
 }
 
+function limpiarConteo() {
+  contado.value = ''
+  envases.value = {}
+  sueltas.value = ''
+}
+
 function cargarDesdeProducto(p) {
-  stock.value = p.stock_actual
+  limpiarConteo()
   cargarPrecio(p)
 }
 
@@ -46,8 +63,28 @@ watch(
   () => productos.actual?.prod_id,
   () => {
     if (productos.actual) cargarDesdeProducto(productos.actual)
+    envasesAbierto.value = false
   },
   { immediate: true }
+)
+
+function formatear(n) {
+  return Number(n || 0).toLocaleString('es-AR', { maximumFractionDigits: 3 })
+}
+
+const p = computed(() => productos.actual)
+const sistema = computed(() => Number(p.value?.stock_actual) || 0)
+const unidad = computed(() => p.value?.unidad || 'u')
+// Unidades que no se fraccionan: teclado numérico sin coma.
+const esEntera = computed(() => /^(u|un|und|unid|unidad|unidades)$/i.test(unidad.value))
+const meta = computed(() => [p.value?.codigo, p.value?.marca, p.value?.categoria].filter(Boolean).join(' · '))
+const ultimoConteo = computed(() => textoRelativo(p.value?.ultimo_conteo))
+const urgencia = computed(() => urgenciaConteo(p.value?.ultimo_conteo))
+const presentaciones = computed(() => p.value?.presentaciones || [])
+
+const contadoIngresado = computed(() => contado.value !== '' && contado.value !== null && contado.value !== undefined)
+const diferencia = computed(() =>
+  contadoIngresado.value ? Math.round((Number(contado.value) - sistema.value) * 1000) / 1000 : null
 )
 
 // Cambios sin guardar respecto de productos.actual (lo último persistido).
@@ -56,16 +93,43 @@ watch(
 function distinto(a, b) {
   return Math.abs((Number(a) || 0) - (Number(b) || 0)) >= 0.005
 }
-const cambioStock = computed(() => !!productos.actual && distinto(stock.value, productos.actual.stock_actual))
+const cambioConteo = contadoIngresado
 const cambioPrecio = computed(
-  () =>
-    !!productos.actual &&
-    (distinto(costo.value, productos.actual.costo) || distinto(precioVenta.value, productos.actual.precio_venta))
+  () => !!p.value && (distinto(costo.value, p.value.costo) || distinto(precioVenta.value, p.value.precio_venta))
 )
-const hayCambios = computed(() => cambioStock.value || cambioPrecio.value)
+const hayCambios = computed(() => cambioConteo.value || cambioPrecio.value)
+
+const etiquetaBoton = computed(() => {
+  if (guardando.value) return 'Guardando...'
+  if (!hayCambios.value) return `Coincide: ${formatear(sistema.value)} ${unidad.value}`
+  if (cambioConteo.value && cambioPrecio.value) return 'Guardar conteo y precio'
+  return cambioConteo.value ? 'Guardar conteo' : 'Guardar precio'
+})
 
 function reiniciar() {
-  cargarDesdeProducto(productos.actual)
+  cargarDesdeProducto(p.value)
+}
+
+function ajustarStepper(delta) {
+  const base = contadoIngresado.value ? Number(contado.value) : sistema.value
+  contado.value = Math.max(0, base + delta)
+}
+
+// Al tocar el campo se selecciona todo: tipear reemplaza en vez de sumar dígitos.
+function seleccionarTodo(e) {
+  e.target.select?.()
+}
+
+const totalEnvases = computed(() => {
+  const porEnvases = presentaciones.value.reduce(
+    (acc, pres) => acc + (Number(envases.value[pres.id]) || 0) * pres.factor,
+    0
+  )
+  return Math.round((porEnvases + (Number(sueltas.value) || 0)) * 1000) / 1000
+})
+
+function usarTotalEnvases() {
+  contado.value = totalEnvases.value
 }
 
 // Handlers de @input (corren después del update de v-model, así que costo y
@@ -89,20 +153,28 @@ const margenActual = computed(() => {
   return v > 0 ? ((v - c) / v) * 100 : 0
 })
 
-const margenBajo = computed(() => margenActual.value < (auth.config.margen_objetivo_pct ?? 30))
-
-function ajustarStepper(delta) {
-  stock.value = Math.max(0, Number(stock.value || 0) + delta)
-}
+const margenObjetivo = computed(() => auth.config.margen_objetivo_pct ?? 30)
+const margenBajo = computed(() => margenActual.value < margenObjetivo.value)
+const margenTexto = computed(
+  () => `${margenActual.value.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+)
 
 function formatearDiferencia(n) {
   if (!n) return 'sin diferencias'
-  return (n > 0 ? '+' : '') + Number(n).toLocaleString('es-AR', { maximumFractionDigits: 3 })
+  return (n > 0 ? '+' : '') + formatear(n)
 }
 
-// Sin cambios, el botón confirma el conteo: el stock contado coincide con el
-// sistema y eso también tiene que quedar registrado (si no, el producto sigue
-// "sin controlar" para siempre).
+function vibrar() {
+  try {
+    navigator.vibrate?.(40)
+  } catch {
+    // Sin soporte (iOS, desktop): no pasa nada.
+  }
+}
+
+// Sin cambios, el botón confirma que lo contado coincide con el sistema: eso
+// también tiene que quedar registrado (si no, el producto sigue "sin
+// controlar" para siempre).
 //
 // Con cambios, manda solo lo que cambió: registrar_conteo asienta un conteo y
 // actualizar_precio un ajuste de precio, así que guardar uno no debe asentar
@@ -113,18 +185,19 @@ async function guardar() {
   // click sincrónico.
   if (guardando.value) return
   guardando.value = true
-  const prodId = productos.actual.prod_id
-  const contar = cambioStock.value || !hayCambios.value
+  const prodId = p.value.prod_id
+  const contar = cambioConteo.value || !hayCambios.value
+  const valorContado = cambioConteo.value ? Number(contado.value) : sistema.value
   const guardarPrecio = cambioPrecio.value
-  let diferencia = 0
+  let dif = 0
   const guardados = []
   const fallas = []
   try {
     if (contar) {
       try {
-        const resultado = await productos.registrarConteo(prodId, stock.value)
-        stock.value = resultado.stock_actual
-        diferencia = resultado.diferencia
+        const resultado = await productos.registrarConteo(prodId, valorContado)
+        dif = resultado.diferencia
+        limpiarConteo()
         guardados.push('conteo')
       } catch (e) {
         fallas.push({ parte: 'conteo', mensaje: e.message })
@@ -145,11 +218,14 @@ async function guardar() {
   }
 
   if (fallas.length === 0) {
-    const conteo = `Conteo registrado: ${formatearDiferencia(diferencia)}.`
+    vibrar()
     if (guardados.length > 1) {
-      ui.mostrarToast(`Conteo registrado (${formatearDiferencia(diferencia)}) y precio actualizado.`, 'success')
+      ui.mostrarToast(`Conteo registrado (${formatearDiferencia(dif)}) y precio actualizado.`, 'success')
     } else {
-      ui.mostrarToast(guardados[0] === 'conteo' ? conteo : 'Precio actualizado.', 'success')
+      ui.mostrarToast(
+        guardados[0] === 'conteo' ? `Conteo registrado: ${formatearDiferencia(dif)}.` : 'Precio actualizado.',
+        'success'
+      )
     }
   } else if (guardados.length > 0) {
     ui.mostrarToast(`Se guardó el ${guardados[0]}, pero no el ${fallas[0].parte}: ${fallas[0].mensaje}`, 'error')
@@ -158,78 +234,195 @@ async function guardar() {
   } else {
     ui.mostrarToast(fallas[0].mensaje, 'error')
   }
+
+  if (guardados.length > 0) {
+    emit('guardado', { conteo: guardados.includes('conteo'), diferencia: dif })
+  }
 }
 </script>
 
 <template>
-  <div v-if="productos.actual" class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-4">
-    <div class="flex justify-between items-start border-b border-slate-100 pb-3 gap-2">
-      <div class="min-w-0">
-        <span class="text-xs font-semibold text-accent bg-blue-50 px-2 py-0.5 rounded">
-          Código: {{ productos.actual.codigo }}
-        </span>
-        <h2 class="font-bold text-lg mt-1 truncate">{{ productos.actual.nombre }}</h2>
-      </div>
-      <span v-if="productos.actual.categoria" class="shrink-0 text-xs bg-slate-100 text-muted px-2 py-1 rounded-md">
-        {{ productos.actual.categoria }}
-      </span>
-    </div>
-
-    <div class="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted -mt-1">
-      <span><i class="fas fa-tag mr-1"></i>Precio ajustado: {{ productos.actual.ultimo_ajuste_precio || '—' }}</span>
-      <span :class="!productos.actual.ultimo_conteo ? 'text-danger font-semibold' : ''">
-        <i class="fas fa-clipboard-check mr-1"></i>Último conteo: {{ productos.actual.ultimo_conteo || 'nunca' }}
-      </span>
-    </div>
-
-    <div class="grid grid-cols-2 gap-3">
-      <div class="bg-slate-50 p-3 rounded-xl border">
-        <label class="block text-xs text-muted font-medium mb-1">Stock actual</label>
-        <div class="flex items-center justify-between">
-          <button class="w-8 h-8 rounded-lg bg-white border shadow-sm font-bold" @click="ajustarStepper(-1)">−</button>
-          <input v-model.number="stock" type="number" class="w-14 text-center bg-transparent font-bold text-lg focus:outline-none" />
-          <button class="w-8 h-8 rounded-lg bg-white border shadow-sm font-bold" @click="ajustarStepper(1)">+</button>
-        </div>
-      </div>
-      <div class="bg-slate-50 p-3 rounded-xl border">
-        <label class="block text-xs text-muted font-medium mb-1">Precio de costo ($)</label>
-        <input
-          v-model.number="costo"
-          type="number"
-          class="w-full bg-transparent font-bold text-lg focus:outline-none"
-          @input="alCambiarCosto"
-        />
-      </div>
-    </div>
-
-    <div class="bg-slate-50 rounded-xl p-3 border space-y-3">
-      <div class="flex justify-between items-center gap-3">
-        <label class="text-xs text-muted font-medium">Precio de venta ($)</label>
-        <input
-          v-model.number="precioVenta"
-          type="number"
-          class="w-28 text-right font-bold text-lg bg-white border rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-accent"
-          @input="alCambiarPrecioVenta"
-        />
-      </div>
-      <div class="flex justify-between items-center pt-2 border-t border-slate-200">
-        <span class="text-xs text-muted">Margen actual</span>
-        <div class="flex items-center gap-2">
-          <span
-            class="font-bold px-2 py-1 rounded-lg text-sm"
-            :class="margenBajo ? 'bg-red-100 text-danger' : 'bg-green-100 text-success'"
-          >
-            {{ margenActual.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) }}%
-          </span>
-          <span class="text-xs font-semibold px-2 py-1 rounded-lg bg-sky-100 text-sky-700">
-            &gt;= {{ auth.config.margen_objetivo_pct ?? 30 }}%
-          </span>
-        </div>
-      </div>
-      <p v-if="margenBajo" class="text-xs text-danger bg-red-50 border border-red-200 rounded-lg p-2">
-        <i class="fas fa-triangle-exclamation mr-1"></i>El margen quedó por debajo del mínimo definido.
+  <div v-if="p" class="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-4">
+    <header>
+      <p class="text-xs text-muted truncate">{{ meta }}</p>
+      <h2 class="font-bold text-lg leading-snug mt-0.5 line-clamp-2">{{ p.nombre }}</h2>
+      <p
+        class="text-xs mt-1 font-medium"
+        :class="{
+          'text-danger': urgencia === 'nunca' || urgencia === 'critico',
+          'text-amber-700': urgencia === 'vencido',
+          'text-success': urgencia === 'al-dia',
+          'text-muted': urgencia === null,
+        }"
+      >
+        <i class="fas fa-clipboard-check mr-1"></i>Último conteo: {{ ultimoConteo }}
       </p>
-    </div>
+    </header>
+
+    <section class="space-y-2">
+      <div class="flex items-stretch gap-3">
+        <div class="w-24 shrink-0 rounded-xl bg-slate-50 border border-slate-200 p-2 text-center flex flex-col justify-center">
+          <p class="text-xs text-muted">Sistema</p>
+          <p class="text-2xl font-bold leading-tight">{{ formatear(sistema) }}</p>
+          <p class="text-xs text-muted">{{ unidad }}</p>
+        </div>
+        <div
+          class="flex-1 min-w-0 rounded-xl border-2 p-2"
+          :class="contadoIngresado ? 'border-accent bg-blue-50/40' : 'border-slate-200'"
+        >
+          <label for="stock-contado" class="block text-xs font-semibold text-muted text-center">Contado</label>
+          <div class="flex items-center gap-2 mt-1">
+            <button
+              type="button"
+              aria-label="Restar uno"
+              class="w-12 h-12 shrink-0 rounded-xl bg-white border border-slate-200 shadow-sm text-xl font-bold active:scale-95"
+              @click="ajustarStepper(-1)"
+            >−</button>
+            <input
+              id="stock-contado"
+              v-model.number="contado"
+              aria-label="Stock contado"
+              type="number"
+              min="0"
+              :step="esEntera ? 1 : 'any'"
+              :inputmode="esEntera ? 'numeric' : 'decimal'"
+              :placeholder="formatear(sistema)"
+              class="flex-1 min-w-0 h-12 text-center text-2xl font-bold bg-transparent placeholder:text-slate-300 focus:outline-none"
+              @focus="seleccionarTodo"
+            />
+            <button
+              type="button"
+              aria-label="Sumar uno"
+              class="w-12 h-12 shrink-0 rounded-xl bg-white border border-slate-200 shadow-sm text-xl font-bold active:scale-95"
+              @click="ajustarStepper(1)"
+            >+</button>
+          </div>
+        </div>
+      </div>
+
+      <p
+        v-if="contadoIngresado"
+        class="text-sm font-semibold text-center"
+        :class="diferencia === 0 ? 'text-success' : diferencia < 0 ? 'text-danger' : 'text-amber-700'"
+      >
+        <template v-if="diferencia === 0"><i class="fas fa-check mr-1"></i>Coincide con el sistema</template>
+        <template v-else-if="diferencia < 0">Faltan {{ formatear(-diferencia) }} {{ unidad }}</template>
+        <template v-else>Sobran {{ formatear(diferencia) }} {{ unidad }}</template>
+      </p>
+
+      <div v-if="presentaciones.length" class="rounded-xl border border-slate-200">
+        <button
+          type="button"
+          class="w-full flex justify-between items-center px-3 py-2 text-sm font-medium"
+          :aria-expanded="envasesAbierto"
+          @click="envasesAbierto = !envasesAbierto"
+        >
+          <span><i class="fas fa-box mr-2 text-muted"></i>Contar por envases</span>
+          <i class="fas text-muted" :class="envasesAbierto ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+        </button>
+        <div v-if="envasesAbierto" class="px-3 pb-3 space-y-2 border-t border-slate-100 pt-2">
+          <div v-for="pres in presentaciones" :key="pres.id" class="flex items-center justify-between gap-2">
+            <label :for="`envase-${pres.id}`" class="text-sm min-w-0 truncate">
+              {{ pres.nombre }} <span class="text-muted">(× {{ formatear(pres.factor) }})</span>
+            </label>
+            <input
+              :id="`envase-${pres.id}`"
+              v-model.number="envases[pres.id]"
+              type="number"
+              min="0"
+              inputmode="numeric"
+              placeholder="0"
+              class="w-20 h-10 text-center text-lg font-bold rounded-lg border border-slate-200"
+              @focus="seleccionarTodo"
+            />
+          </div>
+          <div class="flex items-center justify-between gap-2">
+            <label for="envase-sueltas" class="text-sm">Sueltas ({{ unidad }})</label>
+            <input
+              id="envase-sueltas"
+              v-model.number="sueltas"
+              type="number"
+              min="0"
+              :inputmode="esEntera ? 'numeric' : 'decimal'"
+              placeholder="0"
+              class="w-20 h-10 text-center text-lg font-bold rounded-lg border border-slate-200"
+              @focus="seleccionarTodo"
+            />
+          </div>
+          <button
+            type="button"
+            :disabled="totalEnvases <= 0"
+            class="w-full h-11 rounded-xl bg-slate-800 text-white text-sm font-semibold disabled:opacity-40 active:scale-95"
+            @click="usarTotalEnvases"
+          >
+            Usar total: {{ formatear(totalEnvases) }} {{ unidad }}
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section aria-label="Precio y margen" class="rounded-xl border border-slate-200">
+      <button
+        type="button"
+        class="w-full flex justify-between items-center gap-2 px-3 py-2.5"
+        :aria-expanded="precioAbierto"
+        @click="precioAbierto = !precioAbierto"
+      >
+        <span class="text-sm font-medium"><i class="fas fa-tag mr-2 text-muted"></i>Precio y margen</span>
+        <span class="flex items-center gap-2">
+          <span class="text-sm font-semibold">${{ formatear(precioVenta) }}</span>
+          <span
+            class="text-xs font-bold px-2 py-0.5 rounded-md"
+            :class="margenBajo ? 'bg-red-100 text-danger' : 'bg-green-100 text-success'"
+          >{{ margenTexto }}</span>
+          <i class="fas text-muted text-xs" :class="precioAbierto ? 'fa-chevron-up' : 'fa-chevron-down'"></i>
+        </span>
+      </button>
+      <div v-if="precioAbierto" class="px-3 pb-3 pt-2 space-y-3 border-t border-slate-100">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="precio-costo" class="block text-xs text-muted font-medium mb-1">Precio de costo ($)</label>
+            <input
+              id="precio-costo"
+              v-model.number="costo"
+              aria-label="Precio de costo"
+              type="number"
+              inputmode="decimal"
+              class="w-full h-11 px-2 text-right font-bold text-lg rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-accent"
+              @focus="seleccionarTodo"
+              @input="alCambiarCosto"
+            />
+          </div>
+          <div>
+            <label for="precio-venta" class="block text-xs text-muted font-medium mb-1">Precio de venta ($)</label>
+            <input
+              id="precio-venta"
+              v-model.number="precioVenta"
+              aria-label="Precio de venta"
+              type="number"
+              inputmode="decimal"
+              class="w-full h-11 px-2 text-right font-bold text-lg rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-accent"
+              @focus="seleccionarTodo"
+              @input="alCambiarPrecioVenta"
+            />
+          </div>
+        </div>
+        <div class="flex justify-between items-center">
+          <span class="text-xs text-muted">Margen actual</span>
+          <div class="flex items-center gap-2">
+            <span
+              class="font-bold px-2 py-1 rounded-lg text-sm"
+              :class="margenBajo ? 'bg-red-100 text-danger' : 'bg-green-100 text-success'"
+            >{{ margenTexto }}</span>
+            <span class="text-xs font-semibold px-2 py-1 rounded-lg bg-sky-100 text-sky-700">Objetivo {{ margenObjetivo }}%</span>
+          </div>
+        </div>
+        <p v-if="margenBajo" class="text-xs text-danger bg-red-50 border border-red-200 rounded-lg p-2">
+          <i class="fas fa-triangle-exclamation mr-1"></i>El margen quedó por debajo del mínimo definido.
+        </p>
+        <p class="text-[11px] text-muted">Precio ajustado: {{ textoRelativo(p.ultimo_ajuste_precio) }}</p>
+      </div>
+    </section>
 
     <div class="flex gap-2">
       <button
@@ -244,11 +437,10 @@ async function guardar() {
       </button>
       <button
         :disabled="guardando"
-        class="flex-1 bg-success text-white font-semibold py-3 rounded-xl shadow-sm active:scale-95 disabled:opacity-60"
+        class="flex-1 h-12 bg-success text-white font-semibold rounded-xl shadow-sm active:scale-95 disabled:opacity-60"
         @click="guardar"
       >
-        <i class="fas mr-2" :class="hayCambios ? 'fa-check' : 'fa-clipboard-check'"></i>
-        {{ guardando ? 'Guardando...' : hayCambios ? 'Guardar cambios' : 'Confirmar conteo' }}
+        <i class="fas mr-2" :class="hayCambios ? 'fa-check' : 'fa-clipboard-check'"></i>{{ etiquetaBoton }}
       </button>
     </div>
   </div>

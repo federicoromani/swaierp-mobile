@@ -21,6 +21,7 @@ import { useProductosStore } from '../../../src/stores/productos'
 import { useReportesStore } from '../../../src/stores/reportes'
 import { useUiStore } from '../../../src/stores/ui'
 import ProductoCard from '../../../src/components/ProductoCard.vue'
+import { inputContado, botonPorTexto } from '../../mocks/producto-card-helpers'
 
 function montar(productoInicial) {
   const auth = useAuthStore()
@@ -31,13 +32,6 @@ function montar(productoInicial) {
   return { wrapper, productos, ui: useUiStore() }
 }
 
-function inputStock(wrapper) {
-  return wrapper.findAll('input[type="number"]')[0]
-}
-
-function botonPorTexto(wrapper, texto) {
-  return wrapper.findAll('button').find((b) => b.text().includes(texto))
-}
 
 async function leerBody(request) {
   return Object.fromEntries(new URLSearchParams(await request.clone().text()))
@@ -65,19 +59,20 @@ describe('ProductoCard: registrar conteo', () => {
     )
 
     const { wrapper, productos, ui } = montar(productoEjemplo({ prod_id: 101, stock_actual: 24 }))
-    await inputStock(wrapper).setValue(20)
-    await botonPorTexto(wrapper, 'Guardar cambios').trigger('click')
+    await inputContado(wrapper).setValue(20)
+    await botonPorTexto(wrapper, 'Guardar conteo').trigger('click')
 
     await esperarQue(() => expect(productos.actual.stock_actual).toBe(18))
 
     expect(bodyRecibido).toEqual({ action: 'registrar_conteo', prod_id: '101', stock_contado: '20' })
-    // El input se actualiza con lo que devolvió el backend, no con lo tipeado
-    // (por si el backend lo ajustó).
-    expect(Number(inputStock(wrapper).element.value)).toBe(18)
+    // Guardado: lo contado se vacía y "Sistema" muestra lo que devolvió el
+    // backend (no lo tipeado, por si el backend lo ajustó).
+    expect(inputContado(wrapper).element.value).toBe('')
+    expect(wrapper.text()).toContain('Sistema18')
     expect(ui.toast).toEqual({ mensaje: 'Conteo registrado: -6.', tipo: 'success' })
   })
 
-  it('sin cambios: "Confirmar conteo" registra el conteo con el stock del sistema y saca al producto de pendientes', async () => {
+  it('sin cambios: "Coincide" registra el conteo con el stock del sistema y saca al producto de pendientes', async () => {
     let bodyRecibido = null
     server.use(
       ...mockProductosEndpoint({
@@ -95,7 +90,7 @@ describe('ProductoCard: registrar conteo', () => {
     const reportes = useReportesStore()
     reportes.pendientes = { items: [{ prod_id: 101 }, { prod_id: 102 }], total: 12 }
 
-    await botonPorTexto(wrapper, 'Confirmar conteo').trigger('click')
+    await botonPorTexto(wrapper, 'Coincide').trigger('click')
     await esperarQue(() => expect(ui.toast?.tipo).toBe('success'))
 
     expect(bodyRecibido).toEqual({ action: 'registrar_conteo', prod_id: '101', stock_contado: '24' })
@@ -104,18 +99,18 @@ describe('ProductoCard: registrar conteo', () => {
     expect(reportes.pendientes).toEqual({ items: [{ prod_id: 102 }], total: 11 })
   })
 
-  it('el stepper "+"/"-" ajusta el valor y no baja de 0', async () => {
+  it('el stepper "+"/"-" arranca del stock del sistema y no baja de 0', async () => {
     const { wrapper } = montar(productoEjemplo({ prod_id: 101, stock_actual: 0 }))
     const botones = wrapper.findAll('button')
     const menos = botones.find((b) => b.text() === '−')
     await menos.trigger('click')
     // Math.max(0, ...) no debe dejarlo negativo.
-    expect(Number(inputStock(wrapper).element.value)).toBe(0)
+    expect(Number(inputContado(wrapper).element.value)).toBe(0)
 
     const mas = botones.find((b) => b.text() === '+')
     await mas.trigger('click')
     await mas.trigger('click')
-    expect(Number(inputStock(wrapper).element.value)).toBe(2)
+    expect(Number(inputContado(wrapper).element.value)).toBe(2)
   })
 
   it('guard de respuesta fuera de orden: conteo de A demorado, mientras tanto el store pasa a B — la respuesta de A NO pisa `actual` de B', async () => {
@@ -129,8 +124,8 @@ describe('ProductoCard: registrar conteo', () => {
     )
 
     const { wrapper, productos } = montar(productoEjemplo({ prod_id: 101, nombre: 'Producto A', stock_actual: 24 }))
-    await inputStock(wrapper).setValue(20)
-    const guardado = botonPorTexto(wrapper, 'Guardar cambios').trigger('click')
+    await inputContado(wrapper).setValue(20)
+    const guardado = botonPorTexto(wrapper, 'Guardar conteo').trigger('click')
 
     // Mientras la respuesta de A sigue en vuelo, el store pasa a B.
     productos.actual = productoEjemplo({ prod_id: 202, nombre: 'Producto B', stock_actual: 5 })
@@ -152,12 +147,12 @@ describe('ProductoCard: registrar conteo', () => {
     )
 
     const { wrapper, ui } = montar(productoEjemplo({ prod_id: 101, stock_actual: 24 }))
-    await inputStock(wrapper).setValue(20)
-    await botonPorTexto(wrapper, 'Guardar cambios').trigger('click')
+    await inputContado(wrapper).setValue(20)
+    await botonPorTexto(wrapper, 'Guardar conteo').trigger('click')
 
     await esperarQue(() => expect(ui.toast?.tipo).toBe('error'))
     expect(ui.toast.mensaje).toBe('El stock no puede ser negativo.')
-    expect(Number(inputStock(wrapper).element.value)).toBe(20)
+    expect(Number(inputContado(wrapper).element.value)).toBe(20)
     expect(wrapper.text()).not.toContain('Guardando...')
   })
 
@@ -165,8 +160,8 @@ describe('ProductoCard: registrar conteo', () => {
     server.use(...mockProductosEndpoint({ registrarConteo: () => HttpResponse.error() }))
 
     const { wrapper, ui } = montar(productoEjemplo({ prod_id: 101, stock_actual: 24 }))
-    await inputStock(wrapper).setValue(20)
-    await botonPorTexto(wrapper, 'Guardar cambios').trigger('click')
+    await inputContado(wrapper).setValue(20)
+    await botonPorTexto(wrapper, 'Guardar conteo').trigger('click')
 
     await esperarQue(() => expect(ui.toast?.tipo).toBe('error'))
     expect(ui.toast.mensaje).toBe('No hay conexión con el servidor.')
@@ -187,11 +182,11 @@ describe('ProductoCard: registrar conteo', () => {
     )
 
     const { wrapper, ui } = montar(productoEjemplo({ prod_id: 101, stock_actual: 24 }))
-    await inputStock(wrapper).setValue(20)
-    await botonPorTexto(wrapper, 'Guardar cambios').trigger('click')
+    await inputContado(wrapper).setValue(20)
+    await botonPorTexto(wrapper, 'Guardar conteo').trigger('click')
     await esperarQue(() => expect(ui.problemaConexion).toBe('Sin conexión con el servidor'))
 
-    await botonPorTexto(wrapper, 'Guardar cambios').trigger('click')
+    await botonPorTexto(wrapper, 'Guardar conteo').trigger('click')
     await esperarQue(() => expect(ui.toast?.mensaje).toBe('El stock no puede ser negativo.'))
 
     expect(ui.problemaConexion).toBeNull()
