@@ -7,9 +7,18 @@ function formatearMonto(n) {
   return '$' + Math.round(n || 0).toLocaleString('es-AR')
 }
 
+function formatearCantidad(n) {
+  return Number(n || 0).toLocaleString('es-AR', { maximumFractionDigits: 3 })
+}
+
 function descripcion(item) {
   if (item.tipo === 'precio') {
     return `Costo ${formatearMonto(item.costo_anterior)} → ${formatearMonto(item.costo_nuevo)}`
+  }
+  if (item.tipo === 'conteo') {
+    const dif = Number(item.cantidad || 0)
+    if (!dif) return `Conteo: sin diferencias (${formatearCantidad(item.stock_contado)})`
+    return `Conteo: ${dif > 0 ? '+' : ''}${formatearCantidad(dif)} (sistema ${formatearCantidad(item.stock_sistema)} → ${formatearCantidad(item.stock_contado)})`
   }
   const cantidad = Number(item.cantidad || 0)
   const signo = cantidad >= 0 ? '+' : ''
@@ -30,7 +39,11 @@ function descripcion(item) {
         </div>
         <i
           class="fas shrink-0"
-          :class="item.tipo === 'precio' ? 'fa-tag text-accent' : 'fa-clipboard-check text-muted'"
+          :class="{
+            'fa-tag text-accent': item.tipo === 'precio',
+            'fa-clipboard-check text-success': item.tipo === 'conteo',
+            'fa-right-left text-muted': item.tipo !== 'precio' && item.tipo !== 'conteo',
+          }"
         ></i>
       </div>
     </div>

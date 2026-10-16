@@ -11,7 +11,7 @@
 //     el error es ProductoCard.
 //   - actualizarPrecio() NO verifica que `actual.value.prod_id` siga
 //     coincidiendo antes de pisar la respuesta (a diferencia de
-//     ajustarStock, que sí lo hace — ver ajustar-stock.spec.js).
+//     registrarConteo, que sí lo hace — ver registrar-conteo.spec.js).
 //   - doble-submit: guardar() tiene guard interno además del :disabled.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'

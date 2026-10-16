@@ -37,7 +37,7 @@ function accionNoMockeada(accion) {
 }
 
 // Lee `action` tanto de un body urlencoded (login/refresh/logout/actualizar_precio/
-// ajustar_stock/confirmar) como de un multipart/form-data (analizar) — clona el
+// registrar_conteo/confirmar) como de un multipart/form-data (analizar) — clona el
 // request porque el body de un Request solo se puede leer una vez.
 async function leerAccionDeBody(request) {
   const contentType = request.headers.get('content-type') || ''
@@ -89,9 +89,9 @@ export function mockAuthEndpoint({ login, refresh, logout, config } = {}) {
 // ---------------------------------------------------------------------------
 
 /**
- * @param {{buscar?, detalle?, actualizarPrecio?, ajustarStock?}} acciones
+ * @param {{buscar?, detalle?, actualizarPrecio?, registrarConteo?}} acciones
  */
-export function mockProductosEndpoint({ buscar, detalle, actualizarPrecio, ajustarStock } = {}) {
+export function mockProductosEndpoint({ buscar, detalle, actualizarPrecio, registrarConteo } = {}) {
   const url = `${BASE}/api_productos.php`
   return [
     http.get(url, ({ request }) => {
@@ -104,7 +104,7 @@ export function mockProductosEndpoint({ buscar, detalle, actualizarPrecio, ajust
     }),
     http.post(url, async ({ request }) => {
       const { accion } = await leerAccionDeBody(request)
-      const mapa = { actualizar_precio: actualizarPrecio, ajustar_stock: ajustarStock }
+      const mapa = { actualizar_precio: actualizarPrecio, registrar_conteo: registrarConteo }
       if (!(accion in mapa) || mapa[accion] === undefined) {
         return accionNoMockeada(accion)
       }

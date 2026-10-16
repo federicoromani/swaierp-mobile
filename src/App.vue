@@ -1,6 +1,6 @@
 <script setup>
 import { RouterView, useRoute } from 'vue-router'
-import { computed } from 'vue'
+import { computed, onMounted, onBeforeUnmount } from 'vue'
 import TabBar from './components/TabBar.vue'
 import AppBrand from './components/AppBrand.vue'
 import { useUiStore } from './stores/ui'
@@ -15,15 +15,34 @@ const tecladoAbierto = useTecladoVirtual()
 // El login (y cualquier vista futura marcada requiresAuth:false) no lleva
 // header ni tab bar del ERP.
 const mostrarChrome = computed(() => route.meta.requiresAuth !== false)
+
+function alCambiarRed() {
+  ui.setNavegadorOnline(navigator.onLine)
+}
+onMounted(() => {
+  alCambiarRed()
+  window.addEventListener('online', alCambiarRed)
+  window.addEventListener('offline', alCambiarRed)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('online', alCambiarRed)
+  window.removeEventListener('offline', alCambiarRed)
+})
 </script>
 
 <template>
   <div class="min-h-screen bg-surface text-ink font-sans">
     <header v-if="mostrarChrome" class="bg-primary p-4 sticky top-0 z-40 shadow-md flex justify-between items-center">
       <AppBrand />
-      <div class="flex items-center gap-2 text-xs text-white bg-white/10 px-3 py-1.5 rounded-full">
-        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        Conectado
+      <!-- Solo aparece si hay un problema: con conexión no aporta nada y un
+           "Conectado" fijo engaña justo cuando importa (guardar sin red). -->
+      <div
+        v-if="ui.problemaConexion"
+        role="status"
+        class="flex items-center gap-2 text-xs font-semibold text-amber-950 bg-amber-400 px-3 py-1.5 rounded-full"
+      >
+        <i class="fas fa-wifi"></i>
+        {{ ui.problemaConexion }}
       </div>
     </header>
 

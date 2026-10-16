@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useProductosStore } from '../../../src/stores/productos'
+import { useReportesStore } from '../../../src/stores/reportes'
 import { db } from '../../../src/offline/db'
 import * as productosService from '../../../src/services/productosService'
 
@@ -196,35 +197,54 @@ describe('stores/productos', () => {
     })
   })
 
-  describe('ajustarStock()', () => {
-    it('en éxito con prod_id coincidente, actualiza solo stock_actual sin reemplazar el objeto', async () => {
-      productosService.ajustarStock.mockResolvedValue({ success: true, stock_actual: 42 })
+  describe('registrarConteo()', () => {
+    it('en éxito con prod_id coincidente, reemplaza actual con el detalle devuelto', async () => {
+      const detalle = { success: true, prod_id: 7, nombre: 'Clavo', stock_actual: 42, ultimo_conteo: '2026-10-16 10:00:00', diferencia: 32 }
+      productosService.registrarConteo.mockResolvedValue(detalle)
       const productos = useProductosStore()
-      productos.actual = { prod_id: 7, nombre: 'Clavo', stock_actual: 10, costo: 5 }
+      productos.actual = { prod_id: 7, nombre: 'Clavo', stock_actual: 10, ultimo_conteo: null }
 
-      await productos.ajustarStock(7, 42, 'conteo')
+      const resultado = await productos.registrarConteo(7, 42)
 
+      expect(productosService.registrarConteo).toHaveBeenCalledWith(7, 42)
+      expect(resultado.diferencia).toBe(32)
       expect(productos.actual.stock_actual).toBe(42)
-      expect(productos.actual.nombre).toBe('Clavo')
-      expect(productos.actual.costo).toBe(5)
+      expect(productos.actual.ultimo_conteo).toBe('2026-10-16 10:00:00')
     })
 
     it('en éxito pero el producto actual ya cambió (respuesta fuera de orden), no pisa actual', async () => {
-      productosService.ajustarStock.mockResolvedValue({ success: true, stock_actual: 42 })
+      productosService.registrarConteo.mockResolvedValue({ success: true, prod_id: 7, stock_actual: 42, diferencia: 0 })
       const productos = useProductosStore()
       productos.actual = { prod_id: 999, nombre: 'Otro producto', stock_actual: 1 }
 
-      await productos.ajustarStock(7, 42, '')
+      await productos.registrarConteo(7, 42)
 
       expect(productos.actual.prod_id).toBe(999)
       expect(productos.actual.stock_actual).toBe(1)
     })
 
-    it('con success:false lanza Exception', async () => {
-      productosService.ajustarStock.mockResolvedValue({ success: false, error: 'Stock no puede ser negativo.' })
+    it('saca al producto de "Pendientes de controlar" (si estaba nunca contado)', async () => {
+      productosService.registrarConteo.mockResolvedValue({ success: true, prod_id: 7, stock_actual: 10, diferencia: 0 })
       const productos = useProductosStore()
+      const reportes = useReportesStore()
+      reportes.pendientes = { items: [{ prod_id: 3 }], total: 5 }
+      productos.actual = { prod_id: 7, stock_actual: 10, ultimo_conteo: null }
 
-      await expect(productos.ajustarStock(1, -1, '')).rejects.toThrow('Stock no puede ser negativo.')
+      await productos.registrarConteo(7, 10)
+
+      expect(reportes.pendientes.total).toBe(4)
+      expect(reportes.pendientes.items).toEqual([{ prod_id: 3 }])
+    })
+
+    it('con success:false lanza Exception y no toca pendientes', async () => {
+      productosService.registrarConteo.mockResolvedValue({ success: false, error: 'El stock no puede ser negativo.' })
+      const productos = useProductosStore()
+      const reportes = useReportesStore()
+      reportes.pendientes = { items: [], total: 5 }
+      productos.actual = { prod_id: 1, ultimo_conteo: null }
+
+      await expect(productos.registrarConteo(1, -1)).rejects.toThrow('El stock no puede ser negativo.')
+      expect(reportes.pendientes.total).toBe(5)
     })
   })
 })

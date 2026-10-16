@@ -73,7 +73,7 @@ describe('components/ProductoCard', () => {
     })
     await wrapper.findAll('input[type="number"]')[1].setValue(999) // edición del usuario en costo
 
-    // Simula lo que hace ajustarStock() del store: pisa una propiedad de actual sin cambiar prod_id.
+    // Simula una actualización de actual sin cambiar prod_id (p. ej. tras guardar).
     productos.actual = { ...productos.actual, stock_actual: 777 }
     await wrapper.vm.$nextTick()
 
@@ -215,12 +215,31 @@ describe('components/ProductoCard', () => {
     const inputVenta = (wrapper) => wrapper.findAll('input[type="number"]')[2]
     const botonGuardar = (wrapper) => botonPorTexto(wrapper, 'Guardar cambios')
 
-    it('sin cambios el botón queda deshabilitado', () => {
-      const { wrapper } = montar({ actual: productoBase() })
-      expect(botonGuardar(wrapper).attributes('disabled')).toBeDefined()
+    it('sin cambios el botón dice "Confirmar conteo" y registra un conteo sin diferencias', async () => {
+      const { wrapper, productos, ui } = montar({ actual: productoBase({ prod_id: 1, stock_actual: 10 }) })
+      productos.registrarConteo.mockResolvedValue({ success: true, stock_actual: 10, diferencia: 0 })
+      expect(botonGuardar(wrapper)).toBeUndefined()
+
+      await botonPorTexto(wrapper, 'Confirmar conteo').trigger('click')
+      await flushPromises()
+
+      expect(productos.registrarConteo).toHaveBeenCalledWith(1, 10)
+      expect(productos.actualizarPrecio).not.toHaveBeenCalled()
+      expect(ui.mostrarToast).toHaveBeenCalledWith('Conteo registrado: sin diferencias.', 'success')
     })
 
-    it('solo cambió el precio: llama actualizarPrecio (no ajustarStock) y muestra "Precio actualizado."', async () => {
+    it('con un conteo de menos, el toast muestra la diferencia con signo', async () => {
+      const { wrapper, productos, ui } = montar({ actual: productoBase({ prod_id: 1, stock_actual: 10 }) })
+      productos.registrarConteo.mockResolvedValue({ success: true, stock_actual: 7, diferencia: -3 })
+      await inputStock(wrapper).setValue(7)
+
+      await botonGuardar(wrapper).trigger('click')
+      await flushPromises()
+
+      expect(ui.mostrarToast).toHaveBeenCalledWith('Conteo registrado: -3.', 'success')
+    })
+
+    it('solo cambió el precio: llama actualizarPrecio (no registra conteo) y muestra "Precio actualizado."', async () => {
       const { wrapper, productos, ui } = montar({
         actual: productoBase({ prod_id: 1, costo: 100, precio_venta: 150 }),
       })
@@ -231,27 +250,27 @@ describe('components/ProductoCard', () => {
       await flushPromises()
 
       expect(productos.actualizarPrecio).toHaveBeenCalledWith(1, 100, 180)
-      expect(productos.ajustarStock).not.toHaveBeenCalled()
+      expect(productos.registrarConteo).not.toHaveBeenCalled()
       expect(ui.mostrarToast).toHaveBeenCalledWith('Precio actualizado.', 'success')
     })
 
-    it('solo cambió el stock: llama ajustarStock (no actualizarPrecio) y muestra el stock devuelto por el backend', async () => {
+    it('solo cambió el stock: registra el conteo (no actualizarPrecio) y muestra el stock devuelto por el backend', async () => {
       const { wrapper, productos, ui } = montar({ actual: productoBase({ prod_id: 1, stock_actual: 10 }) })
-      productos.ajustarStock.mockResolvedValue({ success: true, stock_actual: 999 })
+      productos.registrarConteo.mockResolvedValue({ success: true, stock_actual: 999, diferencia: 2 })
       await inputStock(wrapper).setValue(12)
 
       await botonGuardar(wrapper).trigger('click')
       await flushPromises()
 
-      expect(productos.ajustarStock).toHaveBeenCalledWith(1, 12)
+      expect(productos.registrarConteo).toHaveBeenCalledWith(1, 12)
       expect(productos.actualizarPrecio).not.toHaveBeenCalled()
       expect(inputStock(wrapper).element.value).toBe('999')
-      expect(ui.mostrarToast).toHaveBeenCalledWith('Stock actualizado.', 'success')
+      expect(ui.mostrarToast).toHaveBeenCalledWith('Conteo registrado: +2.', 'success')
     })
 
     it('cambiaron los dos: guarda ambos y muestra un solo toast', async () => {
       const { wrapper, productos, ui } = montar({ actual: productoBase({ prod_id: 1, stock_actual: 10 }) })
-      productos.ajustarStock.mockResolvedValue({ success: true, stock_actual: 12 })
+      productos.registrarConteo.mockResolvedValue({ success: true, stock_actual: 12, diferencia: 2 })
       productos.actualizarPrecio.mockResolvedValue({ success: true })
       await inputStock(wrapper).setValue(12)
       await inputVenta(wrapper).setValue(180)
@@ -259,9 +278,9 @@ describe('components/ProductoCard', () => {
       await botonGuardar(wrapper).trigger('click')
       await flushPromises()
 
-      expect(productos.ajustarStock).toHaveBeenCalledWith(1, 12)
+      expect(productos.registrarConteo).toHaveBeenCalledWith(1, 12)
       expect(productos.actualizarPrecio).toHaveBeenCalledWith(1, 100, 180)
-      expect(ui.mostrarToast).toHaveBeenCalledWith('Stock y precio actualizados.', 'success')
+      expect(ui.mostrarToast).toHaveBeenCalledWith('Conteo registrado (+2) y precio actualizado.', 'success')
     })
 
     it('después de guardar el precio, el form muestra lo que persistió el backend y deja de haber cambios', async () => {
@@ -276,12 +295,12 @@ describe('components/ProductoCard', () => {
       await flushPromises()
 
       expect(inputVenta(wrapper).element.value).toBe('179.99')
-      expect(botonGuardar(wrapper).attributes('disabled')).toBeDefined()
+      expect(botonPorTexto(wrapper, 'Confirmar conteo')).toBeTruthy()
     })
 
-    it('si falla el precio pero el stock se guardó, lo dice y conserva lo tipeado en el precio', async () => {
+    it('si falla el precio pero el conteo se guardó, lo dice y conserva lo tipeado en el precio', async () => {
       const { wrapper, productos, ui } = montar({ actual: productoBase({ prod_id: 1, stock_actual: 10 }) })
-      productos.ajustarStock.mockResolvedValue({ success: true, stock_actual: 12 })
+      productos.registrarConteo.mockResolvedValue({ success: true, stock_actual: 12, diferencia: 2 })
       productos.actualizarPrecio.mockRejectedValue(new Error('El precio de venta debe ser mayor al costo.'))
       await inputStock(wrapper).setValue(12)
       await inputVenta(wrapper).setValue(90)
@@ -290,7 +309,7 @@ describe('components/ProductoCard', () => {
       await flushPromises()
 
       expect(ui.mostrarToast).toHaveBeenCalledWith(
-        'Se guardó el stock, pero no el precio: El precio de venta debe ser mayor al costo.',
+        'Se guardó el conteo, pero no el precio: El precio de venta debe ser mayor al costo.',
         'error'
       )
       expect(inputVenta(wrapper).element.value).toBe('90')
@@ -298,7 +317,7 @@ describe('components/ProductoCard', () => {
 
     it('si solo se intentó una parte y falla, muestra el mensaje de la excepción tal cual', async () => {
       const { wrapper, productos, ui } = montar({ actual: productoBase({ prod_id: 1, stock_actual: 10 }) })
-      productos.ajustarStock.mockRejectedValue(new Error('Stock inválido.'))
+      productos.registrarConteo.mockRejectedValue(new Error('Stock inválido.'))
       await inputStock(wrapper).setValue(7)
 
       await botonGuardar(wrapper).trigger('click')
@@ -310,7 +329,7 @@ describe('components/ProductoCard', () => {
 
     it('si fallan las dos partes, informa ambos errores', async () => {
       const { wrapper, productos, ui } = montar({ actual: productoBase({ prod_id: 1, stock_actual: 10 }) })
-      productos.ajustarStock.mockRejectedValue(new Error('Stock inválido.'))
+      productos.registrarConteo.mockRejectedValue(new Error('Stock inválido.'))
       productos.actualizarPrecio.mockRejectedValue(new Error('Precio inválido.'))
       await inputStock(wrapper).setValue(7)
       await inputVenta(wrapper).setValue(180)
@@ -318,7 +337,7 @@ describe('components/ProductoCard', () => {
       await botonGuardar(wrapper).trigger('click')
       await flushPromises()
 
-      expect(ui.mostrarToast).toHaveBeenCalledWith('Stock: Stock inválido. Precio: Precio inválido.', 'error')
+      expect(ui.mostrarToast).toHaveBeenCalledWith('Conteo: Stock inválido. Precio: Precio inválido.', 'error')
     })
 
     it('mientras guarda, el botón queda disabled, dice "Guardando..." y un segundo click no dispara otro guardado', async () => {
@@ -344,7 +363,7 @@ describe('components/ProductoCard', () => {
 
       resolver({ success: true })
       await flushPromises()
-      expect(botonGuardar(wrapper)).toBeTruthy()
+      expect(botonPorTexto(wrapper, 'Guardando...')).toBeUndefined()
     })
   })
 

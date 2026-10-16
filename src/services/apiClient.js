@@ -1,4 +1,5 @@
 import { useAuthStore } from '../stores/auth'
+import { useUiStore } from '../stores/ui'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL
 
@@ -25,6 +26,21 @@ function refrescarUnaVez() {
       })
   }
   return refrescoEnCurso
+}
+
+// fetch() solo rechaza cuando el pedido no llegó al servidor (sin red, DNS,
+// CORS, backend caído): eso alimenta el indicador de conexión del header.
+// Cualquier respuesta, aunque sea 4xx/5xx, prueba que el servidor responde.
+async function fetchConEstado(url, opciones) {
+  const ui = useUiStore()
+  try {
+    const res = await fetch(url, opciones)
+    ui.setServidorAlcanzable(true)
+    return res
+  } catch {
+    ui.setServidorAlcanzable(false)
+    throw new Error('No hay conexión con el servidor.')
+  }
 }
 
 async function parsearJson(res) {
@@ -68,18 +84,13 @@ async function peticion(path, { method = 'GET', params, body, auth = true } = {}
   }
   conAuthHeader()
 
-  let res
-  try {
-    res = await fetch(url, { method, headers, body: payload })
-  } catch {
-    throw new Error('No hay conexión con el servidor.')
-  }
+  let res = await fetchConEstado(url, { method, headers, body: payload })
 
   if (res.status === 401 && auth) {
     const nuevoToken = await refrescarUnaVez()
     if (nuevoToken) {
       headers['Authorization'] = `Bearer ${nuevoToken}`
-      res = await fetch(url, { method, headers, body: payload })
+      res = await fetchConEstado(url, { method, headers, body: payload })
     } else {
       await authStore.limpiarSesionLocal()
     }
@@ -114,18 +125,13 @@ export async function postFormData(path, formData) {
     headers['Authorization'] = `Bearer ${authStore.accessToken}`
   }
 
-  let res
-  try {
-    res = await fetch(url, { method: 'POST', headers, body: formData })
-  } catch {
-    throw new Error('No hay conexión con el servidor.')
-  }
+  let res = await fetchConEstado(url, { method: 'POST', headers, body: formData })
 
   if (res.status === 401) {
     const nuevoToken = await refrescarUnaVez()
     if (nuevoToken) {
       headers['Authorization'] = `Bearer ${nuevoToken}`
-      res = await fetch(url, { method: 'POST', headers, body: formData })
+      res = await fetchConEstado(url, { method: 'POST', headers, body: formData })
     } else {
       await authStore.limpiarSesionLocal()
     }

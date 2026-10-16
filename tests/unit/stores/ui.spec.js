@@ -74,4 +74,39 @@ describe('stores/ui', () => {
     vi.advanceTimersByTime(1000) // t=5000 total: ahora sí vence el de B
     expect(ui.toast).toBeNull()
   })
+  describe('estado de conexión', () => {
+    it('arranca sin problema de conexión', () => {
+      const ui = useUiStore()
+      expect(ui.problemaConexion).toBeNull()
+    })
+
+    it('sin red en el navegador: "Sin conexión"', () => {
+      const ui = useUiStore()
+      ui.setNavegadorOnline(false)
+      expect(ui.problemaConexion).toBe('Sin conexión')
+    })
+
+    it('con red pero el servidor no responde: "Sin conexión con el servidor"', () => {
+      const ui = useUiStore()
+      ui.setServidorAlcanzable(false)
+      expect(ui.problemaConexion).toBe('Sin conexión con el servidor')
+    })
+
+    it('sin red tiene prioridad sobre el servidor caído', () => {
+      const ui = useUiStore()
+      ui.setServidorAlcanzable(false)
+      ui.setNavegadorOnline(false)
+      expect(ui.problemaConexion).toBe('Sin conexión')
+    })
+
+    it('al volver la red se asume el servidor alcanzable hasta el próximo pedido', () => {
+      const ui = useUiStore()
+      ui.setServidorAlcanzable(false)
+      ui.setNavegadorOnline(false)
+
+      ui.setNavegadorOnline(true)
+
+      expect(ui.problemaConexion).toBeNull()
+    })
+  })
 })

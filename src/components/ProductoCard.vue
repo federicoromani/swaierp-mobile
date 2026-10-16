@@ -95,7 +95,16 @@ function ajustarStepper(delta) {
   stock.value = Math.max(0, Number(stock.value || 0) + delta)
 }
 
-// Manda solo lo que cambió: ajustar_stock registra un conteo y
+function formatearDiferencia(n) {
+  if (!n) return 'sin diferencias'
+  return (n > 0 ? '+' : '') + Number(n).toLocaleString('es-AR', { maximumFractionDigits: 3 })
+}
+
+// Sin cambios, el botón confirma el conteo: el stock contado coincide con el
+// sistema y eso también tiene que quedar registrado (si no, el producto sigue
+// "sin controlar" para siempre).
+//
+// Con cambios, manda solo lo que cambió: registrar_conteo asienta un conteo y
 // actualizar_precio un ajuste de precio, así que guardar uno no debe asentar
 // el otro. Si una parte falla, la otra queda guardada y el form conserva lo
 // tipeado en la que falló.
@@ -105,19 +114,23 @@ async function guardar() {
   if (guardando.value) return
   guardando.value = true
   const prodId = productos.actual.prod_id
+  const contar = cambioStock.value || !hayCambios.value
+  const guardarPrecio = cambioPrecio.value
+  let diferencia = 0
   const guardados = []
   const fallas = []
   try {
-    if (cambioStock.value) {
+    if (contar) {
       try {
-        const resultado = await productos.ajustarStock(prodId, stock.value)
+        const resultado = await productos.registrarConteo(prodId, stock.value)
         stock.value = resultado.stock_actual
-        guardados.push('stock')
+        diferencia = resultado.diferencia
+        guardados.push('conteo')
       } catch (e) {
-        fallas.push({ parte: 'stock', mensaje: e.message })
+        fallas.push({ parte: 'conteo', mensaje: e.message })
       }
     }
-    if (cambioPrecio.value) {
+    if (guardarPrecio) {
       try {
         await productos.actualizarPrecio(prodId, costo.value, precioVenta.value)
         // Mostrar lo que persistió el backend (venta = costo*(1+ganancia)).
@@ -132,12 +145,16 @@ async function guardar() {
   }
 
   if (fallas.length === 0) {
-    const mensajes = { stock: 'Stock actualizado.', precio: 'Precio actualizado.' }
-    ui.mostrarToast(guardados.length > 1 ? 'Stock y precio actualizados.' : mensajes[guardados[0]], 'success')
+    const conteo = `Conteo registrado: ${formatearDiferencia(diferencia)}.`
+    if (guardados.length > 1) {
+      ui.mostrarToast(`Conteo registrado (${formatearDiferencia(diferencia)}) y precio actualizado.`, 'success')
+    } else {
+      ui.mostrarToast(guardados[0] === 'conteo' ? conteo : 'Precio actualizado.', 'success')
+    }
   } else if (guardados.length > 0) {
     ui.mostrarToast(`Se guardó el ${guardados[0]}, pero no el ${fallas[0].parte}: ${fallas[0].mensaje}`, 'error')
   } else if (fallas.length > 1) {
-    ui.mostrarToast(fallas.map((f) => `${f.parte === 'stock' ? 'Stock' : 'Precio'}: ${f.mensaje}`).join(' '), 'error')
+    ui.mostrarToast(fallas.map((f) => `${f.parte === 'conteo' ? 'Conteo' : 'Precio'}: ${f.mensaje}`).join(' '), 'error')
   } else {
     ui.mostrarToast(fallas[0].mensaje, 'error')
   }
@@ -226,11 +243,12 @@ async function guardar() {
         <i class="fas fa-rotate-left"></i>
       </button>
       <button
-        :disabled="guardando || !hayCambios"
+        :disabled="guardando"
         class="flex-1 bg-success text-white font-semibold py-3 rounded-xl shadow-sm active:scale-95 disabled:opacity-60"
         @click="guardar"
       >
-        <i class="fas fa-check mr-2"></i>{{ guardando ? 'Guardando...' : 'Guardar cambios' }}
+        <i class="fas mr-2" :class="hayCambios ? 'fa-check' : 'fa-clipboard-check'"></i>
+        {{ guardando ? 'Guardando...' : hayCambios ? 'Guardar cambios' : 'Confirmar conteo' }}
       </button>
     </div>
   </div>

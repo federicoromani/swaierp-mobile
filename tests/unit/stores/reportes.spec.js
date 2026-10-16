@@ -157,4 +157,68 @@ describe('stores/reportes', () => {
     expect(reportes.pendientes.items).toHaveLength(1)
     expect(reportes.ajustes.items).toHaveLength(2)
   })
+  describe('marcarContado()', () => {
+    const haceDias = (n) => {
+      const d = new Date(Date.now() - n * 24 * 60 * 60 * 1000)
+      // Formato real de PostgreSQL (con espacio, no "T").
+      return d.toISOString().replace('T', ' ').slice(0, 19)
+    }
+
+    it('si el producto está en la lista cargada, lo saca y descuenta el total', () => {
+      const reportes = useReportesStore()
+      reportes.pendientes = { items: [{ prod_id: 1 }, { prod_id: 2 }], total: 10 }
+
+      reportes.marcarContado(2, undefined)
+
+      expect(reportes.pendientes.items).toEqual([{ prod_id: 1 }])
+      expect(reportes.pendientes.total).toBe(9)
+    })
+
+    it('nunca contado y fuera de la página cargada: descuenta el total', () => {
+      const reportes = useReportesStore()
+      reportes.pendientes = { items: [{ prod_id: 1 }], total: 10 }
+
+      reportes.marcarContado(99, null)
+
+      expect(reportes.pendientes.items).toEqual([{ prod_id: 1 }])
+      expect(reportes.pendientes.total).toBe(9)
+    })
+
+    it('último conteo hace más de 7 días (timestamp de PostgreSQL): estaba pendiente', () => {
+      const reportes = useReportesStore()
+      reportes.pendientes = { items: [], total: 3 }
+
+      reportes.marcarContado(99, haceDias(30))
+
+      expect(reportes.pendientes.total).toBe(2)
+    })
+
+    it('último conteo reciente: no estaba pendiente, no toca nada', () => {
+      const reportes = useReportesStore()
+      reportes.pendientes = { items: [{ prod_id: 1 }], total: 3 }
+
+      reportes.marcarContado(99, haceDias(2))
+
+      expect(reportes.pendientes).toEqual({ items: [{ prod_id: 1 }], total: 3 })
+    })
+
+    it('sin dato del conteo anterior (undefined) o en un formato desconocido, no descuenta a ciegas', () => {
+      const reportes = useReportesStore()
+      reportes.pendientes = { items: [], total: 3 }
+
+      reportes.marcarContado(99, undefined)
+      reportes.marcarContado(99, '05/07/2026')
+
+      expect(reportes.pendientes.total).toBe(3)
+    })
+
+    it('nunca deja el total negativo', () => {
+      const reportes = useReportesStore()
+      reportes.pendientes = { items: [], total: 0 }
+
+      reportes.marcarContado(99, null)
+
+      expect(reportes.pendientes.total).toBe(0)
+    })
+  })
 })

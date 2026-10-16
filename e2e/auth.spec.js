@@ -47,8 +47,10 @@ test('sin sesión, una ruta protegida redirige a login preservando el destino, y
 
   await expect(page).toHaveURL(/\/buscar$/)
   // El chrome de la app (header + tab bar) solo se muestra autenticado.
-  await expect(page.getByText('Conectado')).toBeVisible()
+  await expect(page.locator('header')).toBeVisible()
   await expect(page.getByRole('link', { name: /reporte/i })).toBeVisible()
+  // Con conexión el header no muestra ningún aviso de estado.
+  await expect(page.getByRole('status')).toHaveCount(0)
 })
 
 test('sesión persistente: recargar la página con la sesión guardada no muestra el login', async ({ page }) => {

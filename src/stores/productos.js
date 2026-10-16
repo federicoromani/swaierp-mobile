@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import * as productosService from '../services/productosService'
 import { db } from '../offline/db'
+import { useReportesStore } from './reportes'
 
 export const useProductosStore = defineStore('productos', () => {
   const resultados = ref([])
@@ -76,14 +77,21 @@ export const useProductosStore = defineStore('productos', () => {
     return data
   }
 
-  async function ajustarStock(prodId, nuevoStock, comentario) {
-    const data = await productosService.ajustarStock(prodId, nuevoStock, comentario)
+  async function registrarConteo(prodId, stockContado) {
+    // ultimo_conteo previo: con eso "Pendientes de controlar" sabe si este
+    // conteo lo saca de la lista aunque no esté en la página cargada.
+    const conteoAnterior = actual.value?.prod_id === prodId ? actual.value.ultimo_conteo : undefined
+    const data = await productosService.registrarConteo(prodId, stockContado)
     if (!data.success) {
-      throw new Error(data.error || 'No se pudo ajustar el stock.')
+      throw new Error(data.error || 'No se pudo registrar el conteo.')
     }
+    // Mismo guard que tenía el ajuste de stock: una respuesta tardía no pisa
+    // otro producto que el usuario ya esté viendo.
     if (actual.value && actual.value.prod_id === prodId) {
-      actual.value.stock_actual = data.stock_actual
+      actual.value = data
+      db.catalogoCache.put(data)
     }
+    useReportesStore().marcarContado(prodId, conteoAnterior)
     return data
   }
 
@@ -96,6 +104,6 @@ export const useProductosStore = defineStore('productos', () => {
     buscar,
     seleccionar,
     actualizarPrecio,
-    ajustarStock,
+    registrarConteo,
   }
 })

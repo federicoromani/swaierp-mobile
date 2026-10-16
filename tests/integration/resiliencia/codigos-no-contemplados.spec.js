@@ -96,7 +96,7 @@ describe('Resiliencia: códigos/errores no contemplados hoy por el backend', () 
     )
   })
 
-  describe('productos.actualizarPrecio / ajustarStock (P0, financiero/stock) contra códigos no contemplados', () => {
+  describe('productos.actualizarPrecio / registrarConteo (P0, financiero/stock) contra códigos no contemplados', () => {
     it.each(CODIGOS_NO_CONTEMPLADOS)(
       'actualizarPrecio código %i: la promesa rechaza igual (no hay manejo especial por código), ProductoCard muestra el mensaje del body, guardando se apaga',
       async (status) => {
@@ -113,10 +113,10 @@ describe('Resiliencia: códigos/errores no contemplados hoy por el backend', () 
     )
 
     it.each(CODIGOS_NO_CONTEMPLADOS)(
-      'ajustarStock código %i: mismo camino — toast de error, guardando se apaga sin crashear',
+      'registrarConteo código %i: mismo camino — toast de error, guardando se apaga sin crashear',
       async (status) => {
         const { wrapper, ui } = montarProductoCard(productoEjemplo({ prod_id: 101, stock_actual: 24 }))
-        server.use(...mockProductosEndpoint({ ajustarStock: respuestaError(status, `Error simulado ${status}.`) }))
+        server.use(...mockProductosEndpoint({ registrarConteo: respuestaError(status, `Error simulado ${status}.`) }))
 
         await inputStock(wrapper).setValue(20)
         await botonPorTexto(wrapper, 'Guardar cambios').trigger('click')

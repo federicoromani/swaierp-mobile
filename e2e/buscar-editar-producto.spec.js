@@ -4,7 +4,7 @@
 // docs/testing/plan-agente-3-e2e.md §1 (P0).
 import { test, expect } from '@playwright/test'
 import { mockApi, leerQueryParams, leerBodyUrlEncoded, contarRequests } from './support/mockApi.js'
-import { PRODUCTOS_URL } from './support/urls.js'
+import { PRODUCTOS_URL, REPORTES_URL } from './support/urls.js'
 import { productoResultado, productoDetalle } from './support/fixtures.js'
 import { loginComo } from './support/login.js'
 import { bloqueCampo } from './support/locators.js'
@@ -66,7 +66,7 @@ test('editar precio: guarda y el margen mostrado se recalcula con el valor que p
   await expect(page.getByText('60,0%')).toBeVisible()
 })
 
-test('editar stock: stepper + tipeo directo, solo manda ajustar_stock si el precio no cambió', async ({ page }) => {
+test('editar stock: stepper + tipeo directo, solo registra el conteo si el precio no cambió', async ({ page }) => {
   await buscarYSeleccionar(page, { detalle: productoDetalle({ stock_actual: 25 }) })
 
   const bloqueStock = bloqueCampo(page, 'Stock actual')
@@ -81,14 +81,30 @@ test('editar stock: stepper + tipeo directo, solo manda ajustar_stock si el prec
 
   await mockApi(page, PRODUCTOS_URL, async (route, request) => {
     const body = leerBodyUrlEncoded(request)
-    expect(body.action).toBe('ajustar_stock')
-    expect(body.nuevo_stock).toBe('30')
-    return { json: { success: true, stock_actual: 30 } }
+    expect(body.action).toBe('registrar_conteo')
+    expect(body.stock_contado).toBe('30')
+    return { json: { ...productoDetalle({ stock_actual: 30 }), diferencia: 5 } }
   })
 
   await page.getByRole('button', { name: /guardar cambios/i }).click()
-  await expect(page.getByText('Stock actualizado.')).toBeVisible()
+  await expect(page.getByText('Conteo registrado: +5.')).toBeVisible()
   await expect(stockInput).toHaveValue('30')
+})
+
+test('confirmar conteo: sin tocar nada, registra que el stock coincide y actualiza "Último conteo"', async ({ page }) => {
+  await buscarYSeleccionar(page, { detalle: productoDetalle({ stock_actual: 25, ultimo_conteo: null }) })
+  await expect(page.getByText('Último conteo: nunca')).toBeVisible()
+
+  await mockApi(page, PRODUCTOS_URL, async (route, request) => {
+    const body = leerBodyUrlEncoded(request)
+    expect(body.action).toBe('registrar_conteo')
+    expect(body.stock_contado).toBe('25')
+    return { json: { ...productoDetalle({ stock_actual: 25, ultimo_conteo: '16/10/2026' }), diferencia: 0 } }
+  })
+
+  await page.getByRole('button', { name: /confirmar conteo/i }).click()
+  await expect(page.getByText('Conteo registrado: sin diferencias.')).toBeVisible()
+  await expect(page.getByText('Último conteo: 16/10/2026')).toBeVisible()
 })
 
 test('caso negativo: precio de venta <= costo, el backend lo rechaza y no se aplica', async ({ page }) => {
@@ -174,7 +190,8 @@ test('reiniciar: descarta los cambios sin guardar y vuelve a los valores del pro
   await expect(bloqueCampo(page, 'Precio de costo').locator('input[type="number"]')).toHaveValue('100')
   await expect(bloqueCampo(page, 'Precio de venta').locator('input[type="number"]')).toHaveValue('155')
   await expect(reiniciar).toHaveCount(0)
-  await expect(page.getByRole('button', { name: /guardar cambios/i })).toBeDisabled()
+  // Sin cambios, el botón principal vuelve a ser "Confirmar conteo".
+  await expect(page.getByRole('button', { name: /confirmar conteo/i })).toBeVisible()
 })
 
 test('caso negativo: búsqueda sin resultados', async ({ page }) => {
@@ -189,4 +206,22 @@ test('caso negativo: buscador vacío no dispara ninguna request', async ({ page 
   await page.locator('input[inputmode="search"]').fill('')
   await page.waitForTimeout(500) // esperar más que el debounce de 300ms para confirmar la AUSENCIA de request
   expect(contador.valor).toBe(0)
+})
+
+test('indicador de conexión: aparece solo sin red y se va al volver', async ({ page }) => {
+  // Sin este mock, el pedido de pendientes de BuscarView sale a la API real,
+  // falla y el aviso aparece desde el arranque (comportamiento correcto, pero
+  // no lo que se prueba acá).
+  await mockApi(page, REPORTES_URL, async () => ({ json: { success: true, items: [], total: 0 } }))
+  await page.reload()
+  await expect(page.getByPlaceholder(/nombre, código o marca/i)).toBeVisible()
+
+  const aviso = page.getByRole('status').filter({ hasText: 'Sin conexión' })
+  await expect(aviso).toHaveCount(0)
+
+  await page.context().setOffline(true)
+  await expect(aviso).toBeVisible()
+
+  await page.context().setOffline(false)
+  await expect(aviso).toHaveCount(0)
 })

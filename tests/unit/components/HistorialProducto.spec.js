@@ -59,12 +59,13 @@ describe('components/HistorialProducto', () => {
     expect(wrapper.text()).not.toContain('·')
   })
 
-  it('usa el ícono fa-tag para tipo precio y fa-clipboard-check para el resto', () => {
+  it('usa un ícono distinto para precio, conteo y ajuste de stock', () => {
     const wrapper = mount(HistorialProducto, {
       props: {
         items: [
           { tipo: 'precio', costo_anterior: 1, costo_nuevo: 2, fecha: 'f1' },
-          { tipo: 'stock', cantidad: 1, fecha: 'f2' },
+          { tipo: 'conteo', cantidad: 0, stock_sistema: 5, stock_contado: 5, fecha: 'f2' },
+          { tipo: 'stock', cantidad: 1, fecha: 'f3' },
         ],
       },
     })
@@ -72,5 +73,20 @@ describe('components/HistorialProducto', () => {
     const iconos = wrapper.findAll('i.fas')
     expect(iconos[0].classes()).toContain('fa-tag')
     expect(iconos[1].classes()).toContain('fa-clipboard-check')
+    expect(iconos[2].classes()).toContain('fa-right-left')
+  })
+
+  it('conteo sin diferencias: lo dice y muestra lo contado', () => {
+    const wrapper = mount(HistorialProducto, {
+      props: { items: [{ tipo: 'conteo', cantidad: 0, stock_sistema: 25, stock_contado: 25, fecha: 'f' }] },
+    })
+    expect(wrapper.text()).toContain('Conteo: sin diferencias (25)')
+  })
+
+  it('conteo con diferencia: muestra el signo y sistema → contado', () => {
+    const wrapper = mount(HistorialProducto, {
+      props: { items: [{ tipo: 'conteo', cantidad: -3, stock_sistema: 25, stock_contado: 22, fecha: 'f' }] },
+    })
+    expect(wrapper.text()).toContain('Conteo: -3 (sistema 25 → 22)')
   })
 })

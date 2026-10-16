@@ -17,11 +17,13 @@ export function actualizarPrecio(prodId, costo, precioVenta) {
   })
 }
 
-export function ajustarStock(prodId, nuevoStock, comentario = '') {
+// Registra un conteo físico aunque coincida con el sistema (es lo que saca
+// al producto de "Pendientes de controlar"); si hay diferencia, el backend
+// además ajusta el stock. Devuelve el detalle actualizado + `diferencia`.
+export function registrarConteo(prodId, stockContado) {
   return post('/api_productos.php', {
-    action: 'ajustar_stock',
+    action: 'registrar_conteo',
     prod_id: prodId,
-    nuevo_stock: nuevoStock,
-    comentario,
+    stock_contado: stockContado,
   })
 }
