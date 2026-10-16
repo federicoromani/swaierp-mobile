@@ -1,9 +1,10 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useProductosStore } from '../stores/productos'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 import { textoRelativo, urgenciaConteo } from '../utils/fechas'
+import { unidadCorta, esUnidadEntera } from '../utils/unidades'
 
 const emit = defineEmits(['guardado'])
 
@@ -74,9 +75,9 @@ function formatear(n) {
 
 const p = computed(() => productos.actual)
 const sistema = computed(() => Number(p.value?.stock_actual) || 0)
-const unidad = computed(() => p.value?.unidad || 'u')
+const unidad = computed(() => unidadCorta(p.value?.unidad))
 // Unidades que no se fraccionan: teclado numérico sin coma.
-const esEntera = computed(() => /^(u|un|und|unid|unidad|unidades)$/i.test(unidad.value))
+const esEntera = computed(() => esUnidadEntera(p.value?.unidad))
 const meta = computed(() => [p.value?.codigo, p.value?.marca, p.value?.categoria].filter(Boolean).join(' · '))
 const ultimoConteo = computed(() => textoRelativo(p.value?.ultimo_conteo))
 const urgencia = computed(() => urgenciaConteo(p.value?.ultimo_conteo))
@@ -98,6 +99,10 @@ const cambioPrecio = computed(
   () => !!p.value && (distinto(costo.value, p.value.costo) || distinto(precioVenta.value, p.value.precio_venta))
 )
 const hayCambios = computed(() => cambioConteo.value || cambioPrecio.value)
+
+// Para que Buscar / el modo conteo pregunten antes de descartar lo tipeado.
+watch(hayCambios, (v) => (productos.cambiosSinGuardar = v), { immediate: true })
+onBeforeUnmount(() => (productos.cambiosSinGuardar = false))
 
 const etiquetaBoton = computed(() => {
   if (guardando.value) return 'Guardando...'
@@ -420,7 +425,7 @@ async function guardar() {
         <p v-if="margenBajo" class="text-xs text-danger bg-red-50 border border-red-200 rounded-lg p-2">
           <i class="fas fa-triangle-exclamation mr-1"></i>El margen quedó por debajo del mínimo definido.
         </p>
-        <p class="text-[11px] text-muted">Precio ajustado: {{ textoRelativo(p.ultimo_ajuste_precio) }}</p>
+        <p class="text-xs text-muted">Precio ajustado: {{ textoRelativo(p.ultimo_ajuste_precio) }}</p>
       </div>
     </section>
 

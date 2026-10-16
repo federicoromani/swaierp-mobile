@@ -134,4 +134,46 @@ describe('Modo conteo', () => {
     await esperarQue(() => expect(wrapper.text()).toContain('¡Listo!'))
     expect(wrapper.text()).toContain('Contaste 0 productos')
   })
+
+  it('saltar con un conteo tipeado pregunta antes de descartarlo', async () => {
+    const conteos = mockearTodo()
+    const { wrapper } = await montar()
+    await esperarQue(() => expect(nombreEnPantalla(wrapper)).toBe('Arandela plana 8mm'))
+
+    await inputContado(wrapper).setValue(7)
+    await botonPorTexto(wrapper, 'Saltar este producto').trigger('click')
+
+    expect(wrapper.find('[role="alertdialog"]').text()).toContain('Arandela plana 8mm')
+    await botonPorTexto(wrapper, 'Seguir editando').trigger('click')
+    expect(nombreEnPantalla(wrapper)).toBe('Arandela plana 8mm')
+    expect(inputContado(wrapper).element.value).toBe('7')
+
+    await botonPorTexto(wrapper, 'Saltar este producto').trigger('click')
+    await botonPorTexto(wrapper, 'Descartar').trigger('click')
+    await esperarQue(() => expect(nombreEnPantalla(wrapper)).toBe('Tuerca hexagonal M8'))
+    expect(conteos).toHaveLength(0)
+  })
+
+  it('un pendiente que dejó de controlar stock se saltea solo y no cuenta como contado', async () => {
+    mockearTodo()
+    server.use(
+      ...mockProductosEndpoint({
+        detalle: ({ request }) => {
+          const id = Number(new URL(request.url).searchParams.get('prod_id'))
+          if (id === 1) {
+            return HttpResponse.json(
+              { success: false, codigo: 'producto_no_disponible', error: 'Este producto no controla stock, por eso no se usa desde la app.' },
+              { status: 404 }
+            )
+          }
+          return HttpResponse.json(productoEjemplo({ prod_id: id, nombre: PRODUCTOS[id], stock_actual: 10, ultimo_conteo: null }))
+        },
+      })
+    )
+    const { wrapper } = await montar()
+
+    await esperarQue(() => expect(nombreEnPantalla(wrapper)).toBe('Tuerca hexagonal M8'))
+    expect(wrapper.text()).toContain('Contados 0 · Quedan 2')
+    expect(useReportesStore().pendientes.items.map((p) => p.prod_id)).toEqual([2, 3])
+  })
 })

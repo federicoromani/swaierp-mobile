@@ -6,6 +6,25 @@ import { urgenciaConteo } from '../utils/fechas'
 // Días sin contar a partir de los cuales un producto figura como pendiente.
 export const DIAS_PENDIENTE = 7
 
+// Contador de "contados hoy" del dispositivo (para el progreso del día en
+// Buscar). Es solo una ayuda visual: si el storage no anda, arranca en 0.
+const CLAVE_CONTEOS_HOY = 'swaierp.conteosHoy'
+
+function hoyLocal() {
+  const d = new Date()
+  const dd = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${dd(d.getMonth() + 1)}-${dd(d.getDate())}`
+}
+
+function leerConteosHoy() {
+  try {
+    const guardado = JSON.parse(localStorage.getItem(CLAVE_CONTEOS_HOY) || 'null')
+    return guardado && guardado.fecha === hoyLocal() ? Number(guardado.cantidad) || 0 : 0
+  } catch {
+    return 0
+  }
+}
+
 export const useReportesStore = defineStore('reportes', () => {
   const pendientes = ref({ items: [], total: 0 })
   const ajustes = ref({ items: [], total: 0 })
@@ -16,6 +35,7 @@ export const useReportesStore = defineStore('reportes', () => {
   // Filtro por categoría (hoja) para contar un estante de una vez. null = todas.
   const filtroCategoria = ref(null)
   const categorias = ref([])
+  const conteosHoy = ref(leerConteosHoy())
 
   async function cargarPendientes(offset = 0) {
     cargando.value = true
@@ -53,6 +73,11 @@ export const useReportesStore = defineStore('reportes', () => {
     await cargarPendientes(0)
   }
 
+  /** "Actualizar": vuelve a pedir la lista (con el filtro actual) y los chips. */
+  async function recargarPendientes() {
+    await Promise.all([cargarPendientes(0), cargarCategorias()])
+  }
+
   async function cargarAjustes(offset = 0) {
     cargando.value = true
     try {
@@ -79,6 +104,7 @@ export const useReportesStore = defineStore('reportes', () => {
    * @param {number|null|undefined} categoriaId
    */
   function marcarContado(prodId, conteoAnterior, categoriaId) {
+    sumarConteoHoy()
     const items = pendientes.value.items
     const item = items.find((p) => p.prod_id === prodId)
     const urgencia = conteoAnterior === undefined ? null : urgenciaConteo(conteoAnterior, DIAS_PENDIENTE)
@@ -100,6 +126,34 @@ export const useReportesStore = defineStore('reportes', () => {
     }
   }
 
+  /**
+   * Un producto que dejó de estar disponible en la app (no controla stock):
+   * se saca de la lista cargada sin contarlo como contado.
+   */
+  function quitarPendiente(prodId) {
+    const item = pendientes.value.items.find((p) => p.prod_id === prodId)
+    if (!item) return
+    pendientes.value = {
+      items: pendientes.value.items.filter((p) => p.prod_id !== prodId),
+      total: Math.max(0, pendientes.value.total - 1),
+    }
+    if (item.categoria_id != null) {
+      categorias.value = categorias.value
+        .map((c) => (c.categoria_id === item.categoria_id ? { ...c, pendientes: c.pendientes - 1 } : c))
+        .filter((c) => c.pendientes > 0)
+    }
+  }
+
+  function sumarConteoHoy() {
+    // Si quedó abierta de un día para el otro, el contador vuelve a 0.
+    conteosHoy.value = leerConteosHoy() + 1
+    try {
+      localStorage.setItem(CLAVE_CONTEOS_HOY, JSON.stringify({ fecha: hoyLocal(), cantidad: conteosHoy.value }))
+    } catch {
+      // sin storage: el contador vive solo en memoria
+    }
+  }
+
   return {
     pendientes,
     ajustes,
@@ -107,10 +161,13 @@ export const useReportesStore = defineStore('reportes', () => {
     pendientesCargados,
     filtroCategoria,
     categorias,
+    conteosHoy,
     cargarPendientes,
+    recargarPendientes,
     cargarCategorias,
     filtrarPorCategoria,
     cargarAjustes,
     marcarContado,
+    quitarPendiente,
   }
 })

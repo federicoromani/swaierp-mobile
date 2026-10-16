@@ -5,8 +5,8 @@ const nombreComercio = import.meta.env.VITE_COMERCIO_NOMBRE || 'SWAI ERP'
 </script>
 
 <template>
-  <div class="flex items-center gap-2 text-white">
-    <i class="fas fa-boxes-stacked text-lg"></i>
-    <h1 class="font-bold text-base">{{ nombreComercio }} <span class="text-white/60 font-normal">Mobile</span></h1>
+  <div class="flex items-center gap-2 text-white min-w-0">
+    <i class="fas fa-boxes-stacked"></i>
+    <h1 class="font-bold text-sm truncate">{{ nombreComercio }} <span class="text-white/60 font-normal">Mobile</span></h1>
   </div>
 </template>

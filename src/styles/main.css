@@ -2,15 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Alta densidad, texto legible chico: mismo criterio que css/saas-template.css
-   del ERP (13px base, sans-serif del sistema). */
+/* Se usa de pie, con una mano y a veces con poca luz: el texto base es 15px
+   (la escala de tailwind.config.js sube xs/sm en la misma proporción), no los
+   13px de alta densidad del ERP de escritorio. */
 html {
   -webkit-tap-highlight-color: transparent;
+  /* Sin zoom por doble toque (los toques rápidos de +/- lo disparaban); el
+     zoom con dos dedos sigue andando. */
+  touch-action: manipulation;
 }
 
 body {
   @apply bg-surface text-ink font-sans antialiased;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 /* Evita el "pull to refresh" / selección de texto accidental típicos de
@@ -25,4 +29,11 @@ input,
 textarea {
   -webkit-user-select: text;
   user-select: text;
+}
+
+/* iOS hace zoom al enfocar un campo con letra de menos de 16px. */
+input,
+select,
+textarea {
+  font-size: max(16px, 1em);
 }

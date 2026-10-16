@@ -85,7 +85,7 @@ describe('views/ReportesView', () => {
   it('cambiar a la tab "ajustes" por primera vez (sin items) llama cargarAjustes(0)', async () => {
     const { wrapper, reportes } = await montar()
 
-    const botonAjustes = wrapper.findAll('button').find((b) => b.text().includes('Ajustes frecuentes'))
+    const botonAjustes = wrapper.findAll('button').find((b) => b.text().trim() === 'Ajustes')
     await botonAjustes.trigger('click')
 
     expect(reportes.cargarAjustes).toHaveBeenCalledWith(0)
@@ -94,8 +94,8 @@ describe('views/ReportesView', () => {
 
   it('volver a la tab "ajustes" cuando ya tiene items NO vuelve a llamar cargarAjustes (evita refetch)', async () => {
     const { wrapper, reportes } = await montar({ ajustes: { items: [{ prod_id: 1, nombre: 'X', cantidad_ajustes: 2 }], total: 1 } })
-    const botonAjustes = wrapper.findAll('button').find((b) => b.text().includes('Ajustes frecuentes'))
-    const botonPendientes = wrapper.findAll('button').find((b) => b.text().includes('Pendientes de controlar'))
+    const botonAjustes = wrapper.findAll('button').find((b) => b.text().trim() === 'Ajustes')
+    const botonPendientes = wrapper.findAll('button').find((b) => b.text().trim() === 'Pendientes')
 
     await botonAjustes.trigger('click')
     await botonPendientes.trigger('click')
@@ -116,7 +116,7 @@ describe('views/ReportesView', () => {
     const { wrapper } = await montar({
       ajustes: { items: [{ prod_id: 1, nombre: 'A', cantidad_ajustes: 1 }], total: 5 },
     })
-    const botonAjustes = wrapper.findAll('button').find((b) => b.text().includes('Ajustes frecuentes'))
+    const botonAjustes = wrapper.findAll('button').find((b) => b.text().trim() === 'Ajustes')
     await botonAjustes.trigger('click')
 
     expect(wrapper.find(SENTINEL).exists()).toBe(true)
@@ -148,7 +148,7 @@ describe('views/ReportesView', () => {
     const { wrapper, reportes } = await montar({
       ajustes: { items: [{ prod_id: 1, nombre: 'A', cantidad_ajustes: 1 }], total: 5 },
     })
-    const botonAjustes = wrapper.findAll('button').find((b) => b.text().includes('Ajustes frecuentes'))
+    const botonAjustes = wrapper.findAll('button').find((b) => b.text().trim() === 'Ajustes')
     await botonAjustes.trigger('click')
 
     // Mismo doble-connect inofensivo del test anterior: usar la instancia viva.
@@ -177,7 +177,7 @@ describe('views/ReportesView', () => {
     const { wrapper, productos, router } = await montar({
       ajustes: { items: [{ prod_id: 7, nombre: 'Tuerca', cantidad_ajustes: 3 }], total: 1 },
     })
-    const botonAjustes = wrapper.findAll('button').find((b) => b.text().includes('Ajustes frecuentes'))
+    const botonAjustes = wrapper.findAll('button').find((b) => b.text().trim() === 'Ajustes')
     await botonAjustes.trigger('click')
 
     const boton = wrapper.findAll('button').find((b) => b.text().includes('Tuerca'))
@@ -251,6 +251,62 @@ describe('views/ReportesView', () => {
       await chip.trigger('click')
 
       expect(reportes.filtrarPorCategoria).toHaveBeenCalledWith(5)
+    })
+  })
+
+  describe('ajustes frecuentes: neto e impacto en $', () => {
+    async function montarEnAjustes(items) {
+      const r = await montar({ ajustes: { items, total: items.length } })
+      await r.wrapper.findAll('button').find((b) => b.text().trim() === 'Ajustes').trigger('click')
+      return r
+    }
+
+    it('cada fila muestra la diferencia neta con su unidad, el impacto en $ y cuántos ajustes', async () => {
+      const { wrapper } = await montarEnAjustes([
+        { prod_id: 1, nombre: 'Taladro', unidad: 'UNID', cantidad_ajustes: 3, diferencia_neta: -4, impacto: 120000, ultimo_ajuste: null },
+        { prod_id: 2, nombre: 'Clavos', unidad: 'kg', cantidad_ajustes: 1, diferencia_neta: 2.5, impacto: 5000, ultimo_ajuste: null },
+        { prod_id: 3, nombre: 'Lija', unidad: 'UNID', cantidad_ajustes: 6, diferencia_neta: 0, impacto: 0, ultimo_ajuste: null },
+      ])
+      const texto = wrapper.text()
+
+      expect(texto).toContain('-4 u')
+      expect(texto).toContain('$120.000')
+      expect(texto).toContain('3 ajustes')
+      expect(texto).toContain('+2,5 kg')
+      expect(texto).toContain('1 ajuste')
+      expect(texto).toContain('neto 0')
+      expect(texto).toContain('mayor impacto en $ primero')
+      expect(texto).not.toContain('Monitorear')
+    })
+
+    it('faltante en rojo, sobrante en ámbar', async () => {
+      const { wrapper } = await montarEnAjustes([
+        { prod_id: 1, nombre: 'A', unidad: 'u', cantidad_ajustes: 1, diferencia_neta: -1, impacto: 10 },
+        { prod_id: 2, nombre: 'B', unidad: 'u', cantidad_ajustes: 1, diferencia_neta: 1, impacto: 10 },
+      ])
+      const netos = wrapper.findAll('.font-bold.whitespace-nowrap')
+
+      expect(netos.find((n) => n.text() === '-1 u').classes()).toContain('text-danger')
+      expect(netos.find((n) => n.text() === '+1 u').classes()).toContain('text-amber-700')
+    })
+  })
+
+  describe('Actualizar', () => {
+    it('en Pendientes recarga la lista y las categorías', async () => {
+      const { wrapper, reportes } = await montar()
+
+      await wrapper.find('button[aria-label="Actualizar"]').trigger('click')
+
+      expect(reportes.recargarPendientes).toHaveBeenCalledTimes(1)
+    })
+
+    it('en Ajustes recarga desde el principio', async () => {
+      const { wrapper, reportes } = await montar({ ajustes: { items: [{ prod_id: 1, nombre: 'A', cantidad_ajustes: 1 }], total: 1 } })
+      await wrapper.findAll('button').find((b) => b.text().trim() === 'Ajustes').trigger('click')
+
+      await wrapper.find('button[aria-label="Actualizar"]').trigger('click')
+
+      expect(reportes.cargarAjustes).toHaveBeenCalledWith(0)
     })
   })
 })

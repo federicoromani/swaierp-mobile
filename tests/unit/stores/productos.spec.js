@@ -247,4 +247,67 @@ describe('stores/productos', () => {
       expect(reportes.pendientes.total).toBe(5)
     })
   })
+
+  describe('producto que no controla stock (no disponible en la app)', () => {
+    const NO_DISPONIBLE = { success: false, codigo: 'producto_no_disponible', error: 'Este producto no controla stock, por eso no se usa desde la app.' }
+
+    it('seleccionar(): no cae a la copia guardada y lo olvida de todos lados', async () => {
+      await db.catalogoCache.put({ prod_id: 40, nombre: 'Flete' })
+      productosService.detalle.mockResolvedValue(NO_DISPONIBLE)
+      const productos = useProductosStore()
+      const reportes = useReportesStore()
+      reportes.pendientes = { items: [{ prod_id: 40, categoria_id: 3 }, { prod_id: 41 }], total: 9 }
+      reportes.categorias = [{ categoria_id: 3, nombre: 'Servicios', pendientes: 1 }]
+      productos.recientes = [{ prod_id: 40 }, { prod_id: 1 }]
+      productos.resultados = [{ prod_id: 40 }]
+      productos.actual = { prod_id: 40, nombre: 'Flete' }
+      const conteosAntes = reportes.conteosHoy
+
+      const resultado = await productos.seleccionar(40)
+
+      expect(resultado).toBe('no-disponible')
+      expect(productos.error).toBe(NO_DISPONIBLE.error)
+      expect(productos.actual).toBeNull()
+      expect(productos.recientes.map((r) => r.prod_id)).toEqual([1])
+      expect(productos.resultados).toEqual([])
+      expect(await db.catalogoCache.get(40)).toBeUndefined()
+      expect(reportes.pendientes).toEqual({ items: [{ prod_id: 41 }], total: 8 })
+      expect(reportes.categorias).toEqual([])
+      // No es un conteo.
+      expect(reportes.conteosHoy).toBe(conteosAntes)
+    })
+
+    it('seleccionar(): con otro producto en pantalla, ese queda', async () => {
+      productosService.detalle.mockResolvedValue(NO_DISPONIBLE)
+      const productos = useProductosStore()
+      productos.actual = { prod_id: 1, nombre: 'Tornillo' }
+
+      await productos.seleccionar(40)
+
+      expect(productos.actual.prod_id).toBe(1)
+    })
+
+    it('registrarConteo() / actualizarPrecio(): rechazan con el mensaje y lo olvidan', async () => {
+      productosService.registrarConteo.mockResolvedValue(NO_DISPONIBLE)
+      productosService.actualizarPrecio.mockResolvedValue(NO_DISPONIBLE)
+      const productos = useProductosStore()
+
+      productos.actual = { prod_id: 40, nombre: 'Flete' }
+      await expect(productos.registrarConteo(40, 3)).rejects.toThrow(NO_DISPONIBLE.error)
+      expect(productos.actual).toBeNull()
+
+      productos.actual = { prod_id: 40, nombre: 'Flete' }
+      await expect(productos.actualizarPrecio(40, 100, 200)).rejects.toThrow(NO_DISPONIBLE.error)
+      expect(productos.actual).toBeNull()
+    })
+
+    it('un error común del servidor sigue cayendo a la copia guardada', async () => {
+      await db.catalogoCache.put({ prod_id: 20, nombre: 'Cache viejo' })
+      productosService.detalle.mockResolvedValue({ success: false, error: 'Error interno.' })
+      const productos = useProductosStore()
+
+      expect(await productos.seleccionar(20)).toBeUndefined()
+      expect(productos.actual.nombre).toBe('Cache viejo')
+    })
+  })
 })

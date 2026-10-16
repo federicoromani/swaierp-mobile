@@ -19,12 +19,15 @@ function crearRouterDeTest() {
   })
 }
 
-async function montar({ rol, rutaInicial = '/buscar' } = {}) {
+async function montar({ rol, rutaInicial = '/buscar', pendientesTotal = 0 } = {}) {
   const router = crearRouterDeTest()
   await router.push(rutaInicial)
   await router.isReady()
   const pinia = createTestingPinia({
-    initialState: { auth: { usuario: rol === undefined ? null : { rol } } },
+    initialState: {
+      auth: { usuario: rol === undefined ? null : { rol } },
+      reportes: { pendientes: { items: [], total: pendientesTotal } },
+    },
   })
   return mount(TabBar, { global: { plugins: [router, pinia] } })
 }
@@ -82,5 +85,20 @@ describe('components/TabBar', () => {
 
     expect(wrapper.find('a[href="/buscar"]').exists()).toBe(true)
     expect(wrapper.find('a[href="/reportes"]').exists()).toBe(true)
+  })
+
+  it('las pestañas dicen lo que se hace en cada una: "Contar" y "Pendientes"', async () => {
+    const wrapper = await montar({ rol: 1 })
+    expect(wrapper.find('a[href="/buscar"]').text()).toBe('Contar')
+    expect(wrapper.find('a[href="/reportes"]').text()).toBe('Pendientes')
+  })
+
+  it('"Pendientes" muestra cuántos hay (y 99+ si son muchos)', async () => {
+    const pocos = await montar({ rol: 1, pendientesTotal: 7 })
+    expect(pocos.find('a[href="/reportes"] [aria-hidden="true"]').text()).toBe('7')
+    expect(pocos.find('a[href="/reportes"] .sr-only').text()).toBe('(7)')
+
+    const muchos = await montar({ rol: 1, pendientesTotal: 250 })
+    expect(muchos.find('a[href="/reportes"] [aria-hidden="true"]').text()).toBe('99+')
   })
 })

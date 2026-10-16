@@ -41,14 +41,14 @@ test('pendientes → empezar a contar → coincide / con diferencia → ¡Listo!
     return { json: productoDetalle({ prod_id: p.prod_id, nombre: p.nombre, stock_actual: 10, ultimo_conteo: null }) }
   })
 
-  await page.getByRole('link', { name: /reporte/i }).click()
+  await page.getByRole('link', { name: /pendientes/i }).click()
   await expect(page.getByRole('button', { name: 'Fijaciones (2)' })).toBeVisible()
   await page.getByRole('button', { name: /empezar a contar \(2\)/i }).click()
 
   await expect(page).toHaveURL(/\/contar/)
   await expect(page.getByText('Modo conteo')).toBeVisible()
   // Pantalla enfocada: sin tab bar.
-  await expect(page.getByRole('link', { name: /reporte/i })).toHaveCount(0)
+  await expect(page.getByRole('link', { name: /pendientes/i })).toHaveCount(0)
 
   // 1) Coincide: un toque.
   await expect(page.getByRole('heading', { name: 'Arandela plana 8mm' })).toBeVisible()

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { parseFechaServidor, diasDesde, textoRelativo, urgenciaConteo } from '../../../src/utils/fechas'
+import {
+  parseFechaServidor,
+  diasDesde,
+  textoRelativo,
+  urgenciaConteo,
+  textoMovimiento,
+  textoFechaCompleta,
+} from '../../../src/utils/fechas'
 
 // "Hoy" fijo para que los tests no dependan del reloj.
 const AHORA = new Date(2026, 9, 16, 12, 0, 0) // 16/10/2026 12:00
@@ -57,6 +64,25 @@ describe('utils/fechas', () => {
       ['formato raro', null],
     ])('%s → %s', (valor, esperado) => {
       expect(urgenciaConteo(valor, 7, AHORA)).toBe(esperado)
+    })
+  })
+
+  describe('textoMovimiento / textoFechaCompleta', () => {
+    it('hoy y ayer con hora; más atrás, relativo', () => {
+      expect(textoMovimiento('2026-10-16 09:05:00', AHORA)).toBe('hoy 09:05')
+      expect(textoMovimiento('2026-10-15 18:30:00.25', AHORA)).toBe('ayer 18:30')
+      expect(textoMovimiento('2026-10-10 10:00:00', AHORA)).toBe('hace 6 días')
+      expect(textoMovimiento('2026-10-16', AHORA)).toBe('hoy')
+    })
+
+    it('fecha desconocida: el texto tal cual; vacía: nada', () => {
+      expect(textoMovimiento('mañana', AHORA)).toBe('mañana')
+      expect(textoMovimiento(null, AHORA)).toBe('')
+    })
+
+    it('fecha completa dd/mm/aaaa (con hora si la trae)', () => {
+      expect(textoFechaCompleta('2026-10-16 09:05:00')).toBe('16/10/2026 09:05')
+      expect(textoFechaCompleta('2026-08-20')).toBe('20/08/2026')
     })
   })
 })

@@ -34,7 +34,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="min-h-screen bg-surface text-ink font-sans">
-    <header v-if="mostrarChrome" class="bg-primary p-4 sticky top-0 z-40 shadow-md flex justify-between items-center">
+    <header v-if="mostrarChrome" class="bg-primary px-4 py-2.5 sticky top-0 z-40 shadow-md flex justify-between items-center gap-2">
       <AppBrand />
       <!-- Solo aparece si hay un problema: con conexión no aporta nada y un
            "Conectado" fijo engaña justo cuando importa (guardar sin red). -->

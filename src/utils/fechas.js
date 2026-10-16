@@ -49,6 +49,32 @@ export function textoRelativo(valor, ahora = new Date()) {
 }
 
 /**
+ * Para listas de movimientos: "hoy 10:23", "ayer 18:05", "hace 3 días".
+ * Fecha desconocida: el texto tal cual.
+ */
+export function textoMovimiento(valor, ahora = new Date()) {
+  const fecha = parseFechaServidor(valor)
+  if (!fecha) return valor ? String(valor) : ''
+  const relativo = textoRelativo(valor, ahora)
+  const tieneHora = /\d{2}:\d{2}/.test(String(valor))
+  if (tieneHora && (relativo === 'hoy' || relativo === 'ayer')) {
+    const hh = String(fecha.getHours()).padStart(2, '0')
+    const mm = String(fecha.getMinutes()).padStart(2, '0')
+    return `${relativo} ${hh}:${mm}`
+  }
+  return relativo
+}
+
+/** "16/10/2026 10:23" (o sin hora si no la trae): para el detalle/tooltip. */
+export function textoFechaCompleta(valor) {
+  const fecha = parseFechaServidor(valor)
+  if (!fecha) return valor ? String(valor) : ''
+  const dd = (n) => String(n).padStart(2, '0')
+  const dia = `${dd(fecha.getDate())}/${dd(fecha.getMonth() + 1)}/${fecha.getFullYear()}`
+  return /\d{2}:\d{2}/.test(String(valor)) ? `${dia} ${dd(fecha.getHours())}:${dd(fecha.getMinutes())}` : dia
+}
+
+/**
  * Qué tan urgente es contar un producto según su último conteo:
  *   'nunca'    nunca se contó
  *   'critico'  hace más de 30 días

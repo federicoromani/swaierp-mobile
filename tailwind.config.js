@@ -27,8 +27,12 @@ export default {
           'sans-serif',
         ],
       },
+      // Escala para leer en el celular: xs 13 / sm 15 / base 16 (la de
+      // Tailwind por defecto es 12 / 14 / 16, y el ERP usa 13 de base).
       fontSize: {
-        base: '13px',
+        xs: ['13px', { lineHeight: '18px' }],
+        sm: ['15px', { lineHeight: '21px' }],
+        base: ['16px', { lineHeight: '24px' }],
       },
     },
   },

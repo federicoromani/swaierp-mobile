@@ -87,7 +87,7 @@ describe('Reportes → producto: navegación cruzada vía productos store', () =
     )
 
     const { wrapper, router, productos } = await montarConRouterView('/reportes')
-    const tabAjustes = wrapper.findAll('button').find((b) => b.text().includes('Ajustes frecuentes'))
+    const tabAjustes = wrapper.findAll('button').find((b) => b.text().trim() === 'Ajustes')
     await tabAjustes.trigger('click')
     await esperarQue(() => expect(wrapper.text()).toContain('Aceite con ajustes'))
 

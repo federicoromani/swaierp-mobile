@@ -33,7 +33,7 @@ async function montar() {
 }
 
 async function irATabAjustes(wrapper) {
-  const tabs = wrapper.findAll('button').filter((b) => b.text().includes('Ajustes frecuentes'))
+  const tabs = wrapper.findAll('button').filter((b) => b.text().trim() === 'Ajustes')
   await tabs[0].trigger('click')
 }
 
@@ -97,7 +97,7 @@ describe('ReportesView + reportes store: ajustes frecuentes', () => {
     await esperarQue(() => expect(reportes.ajustes.items).toHaveLength(3))
 
     // Vuelve a "pendientes" y de nuevo a "ajustes".
-    const tabPendientes = wrapper.findAll('button').find((b) => b.text().includes('Pendientes de controlar'))
+    const tabPendientes = wrapper.findAll('button').find((b) => b.text().trim() === 'Pendientes')
     await tabPendientes.trigger('click')
     await irATabAjustes(wrapper)
 

@@ -78,7 +78,7 @@ test('tab "Ajustes frecuentes": carga perezosa al cambiar de tab, con su propio 
   // La tab "Ajustes" no dispara nada hasta que se la toca.
   expect(llamadasAjustes).toEqual([])
 
-  await page.getByRole('button', { name: /ajustes frecuentes/i }).click()
+  await page.getByRole('button', { name: 'Ajustes', exact: true }).click()
   await expect(page.getByText(/productos con ajustes manuales/i)).toBeVisible()
   expect(llamadasAjustes).toEqual([0])
 

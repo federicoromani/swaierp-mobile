@@ -18,6 +18,9 @@ export const useProductosStore = defineStore('productos', () => {
     () => cargandoDetalle.value && seleccionandoId.value !== actual.value?.prod_id
   )
   const error = ref('')
+  // ProductoCard avisa si tiene un conteo o precio tipeado sin guardar, para
+  // preguntar antes de cambiar de producto o de pantalla.
+  const cambiosSinGuardar = ref(false)
 
   async function buscar(query) {
     const q = (query || '').trim()
@@ -50,6 +53,10 @@ export const useProductosStore = defineStore('productos', () => {
     )
   }
 
+  /**
+   * @returns {Promise<'no-disponible'|undefined>} 'no-disponible' si la API
+   *   dice que el producto no se usa desde la app (no controla stock).
+   */
   async function seleccionar(prodId) {
     cargando.value = true
     cargandoDetalle.value = true
@@ -57,6 +64,12 @@ export const useProductosStore = defineStore('productos', () => {
     error.value = ''
     try {
       const data = await productosService.detalle(prodId)
+      if (data.codigo === productosService.PRODUCTO_NO_DISPONIBLE) {
+        // No es un error transitorio: no hay que caer a la copia guardada.
+        error.value = data.error
+        await olvidar(prodId)
+        return 'no-disponible'
+      }
       if (!data.success) {
         throw new Error(data.error || 'No se pudo obtener el producto.')
       }
@@ -75,6 +88,29 @@ export const useProductosStore = defineStore('productos', () => {
     }
   }
 
+  /**
+   * Saca de todos lados (copia offline, recientes, pantalla, pendientes) un
+   * producto que dejó de estar disponible en la app.
+   */
+  async function olvidar(prodId) {
+    recientes.value = recientes.value.filter((r) => r.prod_id !== prodId)
+    resultados.value = resultados.value.filter((r) => r.prod_id !== prodId)
+    if (actual.value?.prod_id === prodId) actual.value = null
+    useReportesStore().quitarPendiente(prodId)
+    try {
+      await db.catalogoCache.delete(prodId)
+    } catch {
+      // sin IndexedDB: no había copia que borrar
+    }
+  }
+
+  // Guardar sobre un producto que dejó de estar disponible: además del error
+  // (que muestra la card), se lo olvida.
+  async function rechazar(prodId, data, mensajePorDefecto) {
+    if (data.codigo === productosService.PRODUCTO_NO_DISPONIBLE) await olvidar(prodId)
+    throw new Error(data.error || mensajePorDefecto)
+  }
+
   function agregarReciente(p) {
     recientes.value = [p, ...recientes.value.filter((r) => r.prod_id !== p.prod_id)].slice(0, 4)
   }
@@ -82,7 +118,7 @@ export const useProductosStore = defineStore('productos', () => {
   async function actualizarPrecio(prodId, costo, precioVenta) {
     const data = await productosService.actualizarPrecio(prodId, costo, precioVenta)
     if (!data.success) {
-      throw new Error(data.error || 'No se pudo actualizar el precio.')
+      await rechazar(prodId, data, 'No se pudo actualizar el precio.')
     }
     actual.value = data
     return data
@@ -95,7 +131,7 @@ export const useProductosStore = defineStore('productos', () => {
     const conteoAnterior = previo ? previo.ultimo_conteo : undefined
     const data = await productosService.registrarConteo(prodId, stockContado)
     if (!data.success) {
-      throw new Error(data.error || 'No se pudo registrar el conteo.')
+      await rechazar(prodId, data, 'No se pudo registrar el conteo.')
     }
     // Mismo guard que tenía el ajuste de stock: una respuesta tardía no pisa
     // otro producto que el usuario ya esté viendo.
@@ -114,6 +150,7 @@ export const useProductosStore = defineStore('productos', () => {
     cargando,
     cargandoDetalle,
     cargandoOtroProducto,
+    cambiosSinGuardar,
     error,
     buscar,
     seleccionar,

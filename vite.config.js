@@ -46,6 +46,18 @@ export default defineConfig(({ mode }) => {
                 expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 },
               },
             },
+            // Lector de códigos sin BarcodeDetector nativo (iOS): el .wasm
+            // (~1 MB, nombre con hash) no va al precache de la instalación;
+            // se cachea la primera vez que se abre el escáner.
+            {
+              urlPattern: ({ url }) => url.pathname.endsWith('.wasm'),
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'lector-codigos',
+                cacheableResponse: { statuses: [0, 200] },
+                expiration: { maxEntries: 4 },
+              },
+            },
           ],
         },
       }),

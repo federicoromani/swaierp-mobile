@@ -48,7 +48,7 @@ test('sin sesión, una ruta protegida redirige a login preservando el destino, y
   await expect(page).toHaveURL(/\/buscar$/)
   // El chrome de la app (header + tab bar) solo se muestra autenticado.
   await expect(page.locator('header')).toBeVisible()
-  await expect(page.getByRole('link', { name: /reporte/i })).toBeVisible()
+  await expect(page.getByRole('link', { name: /pendientes/i })).toBeVisible()
   // Con conexión el header no muestra ningún aviso de estado.
   await expect(page.getByRole('status')).toHaveCount(0)
 })
@@ -62,7 +62,7 @@ test('sesión persistente: recargar la página con la sesión guardada no muestr
   // restaurarSesion() canjea el refresh token guardado en IndexedDB (real,
   // escrito por la app en el login de arriba) sin mostrar el form de login.
   await expect(page).not.toHaveURL(/\/login/)
-  await expect(page.getByRole('link', { name: /reporte/i })).toBeVisible()
+  await expect(page.getByRole('link', { name: /pendientes/i })).toBeVisible()
 })
 
 test('sesión expirada: un refresh token inválido en el reload manda a login', async ({ page }) => {
@@ -206,6 +206,6 @@ test('sesión invalidada a mitad de uso: no redirige sola hasta la próxima nave
   await expect(page.getByText('No autorizado.')).toBeVisible()
   await expect(page).toHaveURL(/\/buscar$/) // todavía ahí, sin redirect automático
 
-  await page.getByRole('link', { name: /reporte/i }).click()
+  await page.getByRole('link', { name: /pendientes/i }).click()
   await expect(page).toHaveURL(/\/login\?redirect=\/reportes$/)
 })

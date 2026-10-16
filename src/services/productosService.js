@@ -1,5 +1,9 @@
 import { get, post } from './apiClient'
 
+// Lo devuelve la API (con 404) para un producto que no controla stock
+// (prod_valida_stock = false): no se usa desde la app.
+export const PRODUCTO_NO_DISPONIBLE = 'producto_no_disponible'
+
 export function buscar(q, limit = 20) {
   return get('/api_productos.php', { action: 'buscar', q, limit })
 }

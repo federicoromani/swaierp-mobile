@@ -7,10 +7,14 @@
          el viewport visual al abrir el teclado (no el de layout), y los elementos
          position:fixed/absolute (tab bar, desplegable de búsqueda) quedan
          posicionados contra el tamaño completo, ocultos detrás del teclado hasta
-         que se cierra. -->
+         que se cierra.
+         Sin maximum-scale/user-scalable=no: el zoom con dos dedos queda
+         disponible (accesibilidad). El zoom automático de iOS al enfocar un
+         campo se evita con inputs de 16px, y el doble toque con
+         touch-action: manipulation (ver styles/main.css). -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content"
+      content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
     />
     <meta name="theme-color" content="#0f172a" />
     <title>SWAI ERP · Stock y Precios</title>

@@ -10,19 +10,21 @@ import BuscarView from '../../../src/views/BuscarView.vue'
 // tienen su propio spec de componente; acá solo se testea el WIRING propio
 // de BuscarView (qué condiciones muestran qué banner/estado), con los hijos
 // stubeados para no duplicar esfuerzo.
-function crearRouterDeTest() {
+// comoRuta: BuscarView se monta como componente de /buscar dentro de un
+// RouterView (hace falta para que registre su guard de salida).
+function crearRouterDeTest(comoRuta = false) {
   return createRouter({
     history: createMemoryHistory(),
     routes: [
-      { path: '/buscar', name: 'buscar', component: { template: '<div/>' } },
+      { path: '/buscar', name: 'buscar', component: comoRuta ? BuscarView : { template: '<div/>' } },
       { path: '/reportes', name: 'reportes', component: { template: '<div/>' } },
       { path: '/contar', name: 'contar', component: { template: '<div/>' } },
     ],
   })
 }
 
-async function montar({ pendientesTotal = 0, error = '', actual = null } = {}) {
-  const router = crearRouterDeTest()
+async function montar({ pendientesTotal = 0, pendientesItems = [], pendientesCargados = true, error = '', actual = null, comoRuta = false } = {}) {
+  const router = crearRouterDeTest(comoRuta)
   await router.push('/buscar')
   await router.isReady()
   const pinia = createTestingPinia({
@@ -30,31 +32,38 @@ async function montar({ pendientesTotal = 0, error = '', actual = null } = {}) {
     initialState: {
       productos: { resultados: [], recientes: [], actual, cargando: false, error },
       reportes: {
-        pendientes: { items: [], total: pendientesTotal },
+        pendientes: { items: pendientesItems, total: pendientesTotal },
         ajustes: { items: [], total: 0 },
         cargando: false,
+        pendientesCargados,
+        conteosHoy: 4,
       },
     },
   })
-  const wrapper = mount(BuscarView, {
+  const wrapper = mount(comoRuta ? { template: '<RouterView />' } : BuscarView, {
     global: { plugins: [router, pinia], stubs: { SearchBar: true, ProductoCard: true } },
   })
+  await flushPromises()
   const reportes = useReportesStore()
   const productos = useProductosStore()
   return { wrapper, reportes, productos, router }
 }
 
 describe('views/BuscarView', () => {
-  it('al montar, llama a reportes.cargarPendientes(0)', async () => {
-    const { reportes } = await montar()
+  it('al montar, llama a reportes.cargarPendientes(0) si todavía no se cargaron', async () => {
+    const { reportes } = await montar({ pendientesCargados: false })
     expect(reportes.cargarPendientes).toHaveBeenCalledWith(0)
+
+    const yaCargados = await montar({ pendientesCargados: true })
+    expect(yaCargados.reportes.cargarPendientes).not.toHaveBeenCalled()
   })
 
-  it('el banner de pendientes se muestra solo si reportes.pendientes.total > 0', async () => {
-    const sinBanner = await montar({ pendientesTotal: 0 })
+  it('con un producto elegido, el banner de pendientes se muestra solo si reportes.pendientes.total > 0', async () => {
+    const actual = { prod_id: 1, historial: [] }
+    const sinBanner = await montar({ pendientesTotal: 0, actual })
     expect(sinBanner.wrapper.text()).not.toContain('sin controlar hace +7 días')
 
-    const conBanner = await montar({ pendientesTotal: 5 })
+    const conBanner = await montar({ pendientesTotal: 5, actual })
     expect(conBanner.wrapper.text()).toContain('sin controlar hace +7 días')
   })
 
@@ -66,22 +75,109 @@ describe('views/BuscarView', () => {
     expect(conErrorPeroActual.wrapper.text()).not.toContain('Sin conexión con el servidor.')
   })
 
-  it('el estado vacío "Buscá un producto" se muestra solo si no hay producto actual', async () => {
+  it('sin producto elegido muestra "Para contar hoy" (y con producto no)', async () => {
     const sinActual = await montar({ actual: null })
-    expect(sinActual.wrapper.text()).toContain('Buscá un producto')
+    expect(sinActual.wrapper.find('section[aria-label="Para contar hoy"]').exists()).toBe(true)
+    expect(sinActual.wrapper.text()).toContain('Hoy contaste 4')
 
-    const conActual = await montar({ actual: { prod_id: 1 } })
-    expect(conActual.wrapper.text()).not.toContain('Buscá un producto')
+    const conActual = await montar({ actual: { prod_id: 1, historial: [] } })
+    expect(conActual.wrapper.find('section[aria-label="Para contar hoy"]').exists()).toBe(false)
+  })
+
+  it('"Para contar hoy": los 3 más urgentes, cada uno abre el modo conteo en ese producto', async () => {
+    const items = [1, 2, 3, 4].map((id) => ({ prod_id: id, nombre: 'Producto ' + id, ultimo_conteo: null }))
+    const { wrapper, router } = await montar({ pendientesTotal: 12, pendientesItems: items })
+
+    expect(wrapper.text()).toContain('12 productos sin contar hace +7 días')
+    expect(wrapper.text()).toContain('Producto 3')
+    expect(wrapper.text()).not.toContain('Producto 4')
+
+    await wrapper.findAll('button').find((b) => b.text().includes('Producto 2')).trigger('click')
+    await flushPromises()
+    expect(router.currentRoute.value.fullPath).toBe('/contar?desde=2')
+  })
+
+  it('"Empezar a contar (N)" abre el modo conteo', async () => {
+    const { wrapper, router } = await montar({ pendientesTotal: 3, pendientesItems: [{ prod_id: 1, nombre: 'A' }] })
+
+    await wrapper.findAll('button').find((b) => b.text().includes('Empezar a contar (3)')).trigger('click')
+    await flushPromises()
+
+    expect(router.currentRoute.value.path).toBe('/contar')
+  })
+
+  it('sin pendientes (ya cargados) dice que está todo al día', async () => {
+    const { wrapper } = await montar({ pendientesTotal: 0 })
+    expect(wrapper.text()).toContain('Todo al día')
+
+    const cargando = await montar({ pendientesTotal: 0, pendientesCargados: false })
+    expect(cargando.wrapper.text()).not.toContain('Todo al día')
   })
 
   it('click en "Contar" del banner abre el modo conteo', async () => {
-    const { wrapper, router } = await montar({ pendientesTotal: 3 })
+    const { wrapper, router } = await montar({ pendientesTotal: 3, actual: { prod_id: 1, historial: [] } })
 
-    const boton = wrapper.findAll('button').find((b) => b.text().includes('Contar'))
+    const boton = wrapper.findAll('button').find((b) => b.text() === 'Contar')
     await boton.trigger('click')
     await flushPromises()
 
     expect(router.currentRoute.value.path).toBe('/contar')
+  })
+
+  describe('cambios sin guardar', () => {
+    it('elegir otro producto pregunta antes; "Seguir editando" no cambia nada', async () => {
+      const { wrapper, productos } = await montar({ actual: { prod_id: 1, nombre: 'Tornillo', historial: [] } })
+      productos.cambiosSinGuardar = true
+
+      wrapper.findComponent({ name: 'SearchBar' }).vm.$emit('select', 2)
+      await flushPromises()
+
+      expect(productos.seleccionar).not.toHaveBeenCalled()
+      expect(wrapper.find('[role="alertdialog"]').text()).toContain('Tornillo')
+
+      await wrapper.findAll('button').find((b) => b.text() === 'Seguir editando').trigger('click')
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+      expect(productos.seleccionar).not.toHaveBeenCalled()
+    })
+
+    it('"Descartar" sigue con el producto elegido', async () => {
+      const { wrapper, productos } = await montar({ actual: { prod_id: 1, nombre: 'Tornillo', historial: [] } })
+      productos.cambiosSinGuardar = true
+
+      wrapper.findComponent({ name: 'SearchBar' }).vm.$emit('select', 2)
+      await flushPromises()
+      await wrapper.findAll('button').find((b) => b.text() === 'Descartar').trigger('click')
+
+      expect(productos.seleccionar).toHaveBeenCalledWith(2)
+      expect(productos.cambiosSinGuardar).toBe(false)
+    })
+
+    it('sin cambios, elegir otro producto no pregunta', async () => {
+      const { wrapper, productos } = await montar({ actual: { prod_id: 1, historial: [] } })
+
+      wrapper.findComponent({ name: 'SearchBar' }).vm.$emit('select', 2)
+      await flushPromises()
+
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false)
+      expect(productos.seleccionar).toHaveBeenCalledWith(2)
+    })
+
+    it('irse a otra pantalla pregunta antes y, al descartar, navega', async () => {
+      const { wrapper, productos, router } = await montar({
+        actual: { prod_id: 1, nombre: 'Tornillo', historial: [] },
+        comoRuta: true,
+      })
+      productos.cambiosSinGuardar = true
+
+      await router.push('/reportes')
+      await flushPromises()
+      expect(router.currentRoute.value.path).toBe('/buscar')
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(true)
+
+      await wrapper.findAll('button').find((b) => b.text() === 'Descartar').trigger('click')
+      await flushPromises()
+      expect(router.currentRoute.value.path).toBe('/reportes')
+    })
   })
 
   it('renderiza HistorialProducto con productos.actual.historial solo si hay producto actual', async () => {

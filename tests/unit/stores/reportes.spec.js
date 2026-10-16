@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useReportesStore } from '../../../src/stores/reportes'
 import * as reportesService from '../../../src/services/reportesService'
@@ -9,6 +9,7 @@ describe('stores/reportes', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.resetAllMocks()
+    localStorage.clear()
   })
 
   it('estado inicial', () => {
@@ -280,6 +281,67 @@ describe('stores/reportes', () => {
       reportes.marcarContado(99, null, 6)
 
       expect(reportes.pendientes.total).toBe(4)
+    })
+  })
+
+  describe('recargarPendientes()', () => {
+    it('vuelve a pedir la primera página (con el filtro actual) y las categorías', async () => {
+      reportesService.pendientesControlar.mockResolvedValue({ success: true, items: [{ prod_id: 9 }], total: 1 })
+      reportesService.categoriasPendientes.mockResolvedValue({ success: true, items: [{ categoria_id: 5, nombre: 'X', pendientes: 1 }] })
+      const reportes = useReportesStore()
+      reportes.filtroCategoria = 5
+
+      await reportes.recargarPendientes()
+
+      expect(reportesService.pendientesControlar).toHaveBeenCalledWith(7, 20, 0, 5)
+      expect(reportesService.categoriasPendientes).toHaveBeenCalledWith(7)
+      expect(reportes.pendientes.items).toEqual([{ prod_id: 9 }])
+      expect(reportes.categorias).toHaveLength(1)
+    })
+  })
+
+  describe('conteosHoy', () => {
+    afterEach(() => vi.useRealTimers())
+
+    it('cada conteo registrado suma uno y se recuerda en el dispositivo', () => {
+      const reportes = useReportesStore()
+      expect(reportes.conteosHoy).toBe(0)
+
+      reportes.marcarContado(1, '2026-10-15 10:00:00', null)
+      reportes.marcarContado(2, null, null)
+
+      expect(reportes.conteosHoy).toBe(2)
+      setActivePinia(createPinia())
+      expect(useReportesStore().conteosHoy).toBe(2)
+    })
+
+    it('al día siguiente vuelve a empezar de cero', () => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date(2026, 9, 16, 20, 0, 0))
+      useReportesStore().marcarContado(1, null, null)
+
+      vi.setSystemTime(new Date(2026, 9, 17, 8, 0, 0))
+      setActivePinia(createPinia())
+      const reportes = useReportesStore()
+      expect(reportes.conteosHoy).toBe(0)
+      reportes.marcarContado(2, null, null)
+      expect(reportes.conteosHoy).toBe(1)
+    })
+
+    it('sin storage (modo privado, bloqueado) igual cuenta en memoria', () => {
+      const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('bloqueado')
+      })
+      const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new Error('bloqueado')
+      })
+      const reportes = useReportesStore()
+
+      reportes.marcarContado(1, null, null)
+
+      expect(reportes.conteosHoy).toBe(1)
+      set.mockRestore()
+      get.mockRestore()
     })
   })
 })

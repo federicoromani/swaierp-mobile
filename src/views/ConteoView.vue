@@ -3,8 +3,11 @@ import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ProductoCard from '../components/ProductoCard.vue'
 import ProductoCardSkeleton from '../components/ProductoCardSkeleton.vue'
+import ConfirmarDescarte from '../components/ConfirmarDescarte.vue'
 import { useProductosStore } from '../stores/productos'
 import { useReportesStore } from '../stores/reportes'
+import { useUiStore } from '../stores/ui'
+import { useConfirmarDescarte } from '../composables/useConfirmarDescarte'
 
 // Modo conteo: recorre "Pendientes de controlar" de a un producto. Contar
 // uno pasa solo al siguiente; "Saltar" lo deja para el final de la sesión.
@@ -14,6 +17,9 @@ const route = useRoute()
 const router = useRouter()
 const productos = useProductosStore()
 const reportes = useReportesStore()
+const ui = useUiStore()
+// "Saltar" y "Salir" con algo tipeado preguntan antes de descartarlo.
+const descarte = useConfirmarDescarte()
 
 const actualId = ref(null)
 const saltados = ref([])
@@ -42,9 +48,15 @@ async function asegurarCola() {
   }
 }
 
-function mostrar(prodId) {
+async function mostrar(prodId) {
   actualId.value = prodId
-  if (prodId !== null) productos.seleccionar(prodId)
+  if (prodId === null) return
+  const resultado = await productos.seleccionar(prodId)
+  // Dejó de controlar stock (ya no se usa desde la app): se lo saltea solo.
+  if (resultado === 'no-disponible' && actualId.value === prodId) {
+    ui.mostrarToast(productos.error, 'info')
+    await siguiente()
+  }
 }
 
 async function siguiente() {
@@ -53,8 +65,10 @@ async function siguiente() {
 }
 
 function saltar() {
-  if (actualId.value !== null) saltados.value.push(actualId.value)
-  siguiente()
+  descarte.siHayCambios(() => {
+    if (actualId.value !== null) saltados.value.push(actualId.value)
+    siguiente()
+  })
 }
 
 function alGuardar({ conteo }) {
@@ -177,5 +191,12 @@ onMounted(async () => {
         Saltar este producto <i class="fas fa-forward ml-1"></i>
       </button>
     </template>
+
+    <ConfirmarDescarte
+      v-if="descarte.preguntando.value"
+      :nombre="productos.actual?.nombre"
+      @descartar="descarte.descartar"
+      @seguir="descarte.seguirEditando"
+    />
   </section>
 </template>

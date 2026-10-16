@@ -18,7 +18,7 @@ function montar({ resultados = [], recientes = [], cargando = false, margenObjet
       auth: { config: { margen_objetivo_pct: margenObjetivo } },
     },
   })
-  const wrapper = mount(SearchBar, { global: { plugins: [pinia] } })
+  const wrapper = mount(SearchBar, { global: { plugins: [pinia], stubs: { EscanerCodigo: true } } })
   const productos = useProductosStore()
   return { wrapper, productos, pinia }
 }
@@ -206,5 +206,53 @@ describe('components/SearchBar', () => {
 
     expect(input.element.value).toBe('')
     expect(wrapper.find(DROPDOWN).exists()).toBe(false)
+  })
+
+  describe('escanear código de barras', () => {
+    it('el botón de escanear abre el escáner (y con texto escrito se reemplaza por limpiar)', async () => {
+      const { wrapper } = montar()
+
+      await wrapper.find('button[aria-label="Escanear código de barras"]').trigger('click')
+      expect(wrapper.findComponent({ name: 'EscanerCodigo' }).exists()).toBe(true)
+
+      await wrapper.find('input').setValue('torn')
+      expect(wrapper.find('button[aria-label="Escanear código de barras"]').exists()).toBe(false)
+      expect(wrapper.find('button[aria-label="Limpiar búsqueda"]').exists()).toBe(true)
+    })
+
+    it('código que coincide exacto con un producto: lo abre directo', async () => {
+      const { wrapper, productos } = montar()
+      productos.buscar.mockImplementation(async () => {
+        productos.resultados = [
+          { prod_id: 7, codigo: '7790001234567', nombre: 'Tornillo', marca: 'X', stock_actual: 1, margen_pct: 40 },
+        ]
+      })
+      await wrapper.find('button[aria-label="Escanear código de barras"]').trigger('click')
+
+      wrapper.findComponent({ name: 'EscanerCodigo' }).vm.$emit('detectado', '7790001234567')
+      await flushPromises()
+
+      expect(productos.buscar).toHaveBeenCalledWith('7790001234567')
+      expect(wrapper.emitted('select')).toEqual([[7]])
+      expect(wrapper.findComponent({ name: 'EscanerCodigo' }).exists()).toBe(false)
+    })
+
+    it('sin coincidencia exacta: deja el código en el buscador con los resultados, sin buscar dos veces', async () => {
+      const { wrapper, productos } = montar()
+      productos.buscar.mockImplementation(async () => {
+        productos.resultados = [{ prod_id: 8, codigo: 'OTRO', nombre: 'Parecido', marca: 'X', stock_actual: 1, margen_pct: 40 }]
+      })
+      await wrapper.find('button[aria-label="Escanear código de barras"]').trigger('click')
+
+      wrapper.findComponent({ name: 'EscanerCodigo' }).vm.$emit('detectado', '123')
+      await flushPromises()
+      vi.advanceTimersByTime(300)
+      await flushPromises()
+
+      expect(wrapper.find('input').element.value).toBe('123')
+      expect(wrapper.emitted('select')).toBeUndefined()
+      expect(wrapper.find(DROPDOWN).text()).toContain('Parecido')
+      expect(productos.buscar).toHaveBeenCalledTimes(1)
+    })
   })
 })

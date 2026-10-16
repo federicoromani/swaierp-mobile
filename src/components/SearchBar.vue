@@ -2,6 +2,7 @@
 import { ref, watch } from 'vue'
 import { useProductosStore } from '../stores/productos'
 import { useAuthStore } from '../stores/auth'
+import EscanerCodigo from './EscanerCodigo.vue'
 
 const emit = defineEmits(['select'])
 
@@ -9,10 +10,19 @@ const productos = useProductosStore()
 const auth = useAuthStore()
 const query = ref('')
 const mostrarResultados = ref(false)
+const escaneando = ref(false)
 let temporizador = null
+// Código escaneado que ya se buscó: al ponerlo en el campo no se repite la búsqueda.
+let yaBuscado = null
 
 watch(query, (valor) => {
   clearTimeout(temporizador)
+  if (valor && valor === yaBuscado) {
+    yaBuscado = null
+    mostrarResultados.value = true
+    return
+  }
+  yaBuscado = null
   if (!valor) {
     mostrarResultados.value = false
     productos.resultados = []
@@ -34,6 +44,20 @@ function seleccionar(item) {
 function limpiar() {
   query.value = ''
   mostrarResultados.value = false
+}
+
+// El código de barras es prod_codigo: si un resultado coincide exacto se abre
+// directo; si no, queda escrito en el buscador con lo que se encontró.
+async function alEscanear(codigo) {
+  escaneando.value = false
+  await productos.buscar(codigo)
+  const exacto = productos.resultados.find((p) => String(p.codigo ?? '').toLowerCase() === codigo.toLowerCase())
+  if (exacto) {
+    seleccionar(exacto)
+    return
+  }
+  yaBuscado = codigo
+  query.value = codigo
 }
 
 function alPerderFoco() {
@@ -65,21 +89,33 @@ function alPerderFoco() {
         inputmode="search"
         autocomplete="off"
         placeholder="Nombre, código o marca..."
-        class="w-full pl-10 pr-9 py-3 rounded-xl border border-slate-200 shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+        aria-label="Buscar producto"
+        class="w-full pl-10 pr-14 py-3 rounded-xl border border-slate-200 shadow-sm text-base focus:outline-none focus:ring-2 focus:ring-accent"
         @focus="mostrarResultados = !!query"
         @blur="alPerderFoco"
       />
       <button
         v-if="query"
-        class="absolute right-2 top-2.5 w-6 h-6 rounded-full bg-slate-100 text-muted text-xs"
+        type="button"
+        aria-label="Limpiar búsqueda"
+        class="absolute right-1.5 top-1.5 w-10 h-10 flex items-center justify-center text-muted"
         @click="limpiar"
       >
-        <i class="fas fa-xmark"></i>
+        <span class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-xs"><i class="fas fa-xmark"></i></span>
+      </button>
+      <button
+        v-else
+        type="button"
+        aria-label="Escanear código de barras"
+        class="absolute right-1.5 top-1.5 w-10 h-10 rounded-lg flex items-center justify-center text-primary text-lg active:bg-slate-100"
+        @click="escaneando = true"
+      >
+        <i class="fas fa-barcode"></i>
       </button>
     </div>
 
     <div v-if="!query && productos.recientes.length" class="flex gap-2 mt-2 overflow-x-auto pb-1">
-      <span class="text-[10px] text-muted flex items-center pr-1 shrink-0">Recientes:</span>
+      <span class="text-xs text-muted flex items-center pr-1 shrink-0">Recientes:</span>
       <button
         v-for="p in productos.recientes"
         :key="p.prod_id"
@@ -122,5 +158,7 @@ function alPerderFoco() {
         </button>
       </template>
     </div>
+
+    <EscanerCodigo v-if="escaneando" @detectado="alEscanear" @cerrar="escaneando = false" />
   </div>
 </template>

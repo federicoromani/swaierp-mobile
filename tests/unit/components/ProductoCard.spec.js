@@ -450,4 +450,27 @@ describe('components/ProductoCard', () => {
       expect((await inputVenta(wrapper)).element.value).toBe('300')
     })
   })
+
+  describe('unidad y cambios sin guardar', () => {
+    it('la unidad se muestra corta ("UNID" → "u")', () => {
+      const { wrapper } = montar({ actual: productoBase({ stock_actual: 10, unidad: 'UNID' }) })
+      expect(botonPrincipal(wrapper).text()).toContain('Coincide: 10 u')
+      expect(wrapper.text()).not.toContain('UNID')
+    })
+
+    it('avisa al store si hay algo tipeado sin guardar (para preguntar antes de descartarlo)', async () => {
+      const { wrapper, productos } = montar({ actual: productoBase() })
+      expect(productos.cambiosSinGuardar).toBe(false)
+
+      await inputContado(wrapper).setValue(7)
+      expect(productos.cambiosSinGuardar).toBe(true)
+
+      await wrapper.find('button[aria-label="Reiniciar valores"]').trigger('click')
+      expect(productos.cambiosSinGuardar).toBe(false)
+
+      await inputContado(wrapper).setValue(3)
+      wrapper.unmount()
+      expect(productos.cambiosSinGuardar).toBe(false)
+    })
+  })
 })
