@@ -12,8 +12,9 @@ export default defineConfig(({ mode }) => {
       vue(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['icons/icon.svg', 'icons/icon-maskable.svg'],
+        includeAssets: ['icons/icon.svg', 'icons/icon-maskable.svg', 'icons/apple-touch-icon.png'],
         manifest: {
+          id: '/',
           name: `${nombreComercio} · Stock y Precios`,
           short_name: nombreComercio,
           description: `Actualización ágil de stock y precios — ${nombreComercio}`,
@@ -21,9 +22,17 @@ export default defineConfig(({ mode }) => {
           background_color: '#f1f5f9',
           display: 'standalone',
           start_url: '/',
+          scope: '/',
+          lang: 'es-AR',
+          orientation: 'portrait',
+          // PNG de 192 y 512: Chrome en Android los exige para instalar la app
+          // como app (WebAPK); con solo SVG puede quedar como acceso directo
+          // que abre una pestaña del navegador. Se generan desde los SVG.
           icons: [
+            { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+            { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+            { src: 'icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
             { src: 'icons/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-            { src: 'icons/icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
           ],
         },
         workbox: {

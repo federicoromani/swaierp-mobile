@@ -51,6 +51,14 @@ test('los íconos del manifest resuelven con el content-type correcto', async ({
   for (const icono of manifest.icons) {
     const respuesta = await page.request.get('/' + icono.src.replace(/^\/+/, ''))
     expect(respuesta.status(), `icono ${icono.src}`).toBe(200)
-    expect(respuesta.headers()['content-type']).toContain('svg')
+    expect(respuesta.headers()['content-type'], `icono ${icono.src}`).toBe(icono.type)
   }
+})
+
+test('trae íconos PNG de 192 y 512 (Chrome en Android los exige para instalarla como app)', async ({ page }) => {
+  const manifest = await (await page.request.get('/manifest.webmanifest')).json()
+  const png = manifest.icons.filter((i) => i.type === 'image/png')
+
+  expect(png.map((i) => i.sizes)).toEqual(expect.arrayContaining(['192x192', '512x512']))
+  expect(png.some((i) => i.purpose === 'maskable')).toBe(true)
 })
