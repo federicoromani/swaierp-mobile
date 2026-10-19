@@ -21,6 +21,17 @@ export function actualizarPrecio(prodId, costo, precioVenta) {
   })
 }
 
+// Asigna el código de barras del producto ('' lo quita). Si el código ya lo
+// tiene otro producto, la API lo rechaza nombrándolo. Devuelve el detalle
+// actualizado.
+export function asignarCodigoBarras(prodId, codigoBarras) {
+  return post('/api_productos.php', {
+    action: 'asignar_codigo_barras',
+    prod_id: prodId,
+    codigo_barras: codigoBarras,
+  })
+}
+
 // Registra un conteo físico aunque coincida con el sistema (es lo que saca
 // al producto de "Pendientes de controlar"); si hay diferencia, el backend
 // además ajusta el stock. Devuelve el detalle actualizado + `diferencia`.

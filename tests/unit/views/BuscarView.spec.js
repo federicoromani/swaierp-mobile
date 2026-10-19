@@ -180,6 +180,57 @@ describe('views/BuscarView', () => {
     })
   })
 
+  describe('código escaneado sin producto', () => {
+    it('sin producto abierto: avisa con el código y se puede descartar', async () => {
+      const { wrapper } = await montar()
+
+      wrapper.findComponent({ name: 'SearchBar' }).vm.$emit('sin-producto', '7790001112223')
+      await flushPromises()
+      expect(wrapper.text()).toContain('Ningún producto tiene el código 7790001112223')
+
+      await wrapper.find('button[aria-label="Descartar código escaneado"]').trigger('click')
+      expect(wrapper.text()).not.toContain('Ningún producto tiene el código')
+    })
+
+    it('con un producto abierto se lo pasa a la card, y se limpia al asignarlo', async () => {
+      const { wrapper } = await montar({ actual: { prod_id: 1, historial: [] } })
+      const card = () => wrapper.findComponent({ name: 'ProductoCard' })
+
+      wrapper.findComponent({ name: 'SearchBar' }).vm.$emit('sin-producto', '123')
+      await flushPromises()
+      expect(card().props('codigoPorAsignar')).toBe('123')
+      expect(wrapper.text()).not.toContain('Ningún producto tiene el código')
+
+      card().vm.$emit('codigo-asignado', '123')
+      await flushPromises()
+      expect(card().props('codigoPorAsignar')).toBeNull()
+    })
+
+    it('escanear después un producto que existe descarta el código pendiente', async () => {
+      const { wrapper } = await montar({ actual: { prod_id: 1, historial: [] } })
+      const searchBar = wrapper.findComponent({ name: 'SearchBar' })
+
+      searchBar.vm.$emit('sin-producto', '123')
+      await flushPromises()
+      searchBar.vm.$emit('select', 1, { escaneado: true })
+      await flushPromises()
+
+      expect(wrapper.findComponent({ name: 'ProductoCard' }).props('codigoPorAsignar')).toBeNull()
+    })
+
+    it('elegir un producto buscando a mano mantiene el código para asignárselo', async () => {
+      const { wrapper } = await montar({ actual: { prod_id: 1, historial: [] } })
+      const searchBar = wrapper.findComponent({ name: 'SearchBar' })
+
+      searchBar.vm.$emit('sin-producto', '123')
+      await flushPromises()
+      searchBar.vm.$emit('select', 1, { escaneado: false })
+      await flushPromises()
+
+      expect(wrapper.findComponent({ name: 'ProductoCard' }).props('codigoPorAsignar')).toBe('123')
+    })
+  })
+
   it('renderiza HistorialProducto con productos.actual.historial solo si hay producto actual', async () => {
     const conActual = await montar({
       actual: { prod_id: 1, historial: [{ tipo: 'precio', costo_anterior: 1, costo_nuevo: 2, fecha: 'f' }] },

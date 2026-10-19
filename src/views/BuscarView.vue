@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import SearchBar from '../components/SearchBar.vue'
 import ProductoCard from '../components/ProductoCard.vue'
@@ -42,7 +42,13 @@ async function abrir(prodId) {
   }
 }
 
-function seleccionar(prodId) {
+// Código escaneado que no es de ningún producto: queda a mano para
+// asignárselo al producto que se busque y abra a continuación.
+const codigoSinProducto = ref(null)
+
+function seleccionar(prodId, { escaneado = false } = {}) {
+  // Se escaneó un producto que existe: ese código ya no está pendiente.
+  if (escaneado) codigoSinProducto.value = null
   if (prodId === productos.actual?.prod_id) return abrir(prodId)
   descarte.siHayCambios(() => abrir(prodId))
 }
@@ -57,14 +63,38 @@ function contar(desde = null) {
 
 <template>
   <section class="space-y-4">
-    <SearchBar @select="seleccionar" />
+    <SearchBar @select="seleccionar" @sin-producto="codigoSinProducto = $event" />
+
+    <div
+      v-if="codigoSinProducto && !mostrarCard"
+      role="status"
+      class="bg-sky-50 border border-sky-200 rounded-lg px-3 py-2 flex items-start justify-between gap-2"
+    >
+      <p class="text-sm min-w-0">
+        Ningún producto tiene el código <strong class="font-mono break-words">{{ codigoSinProducto }}</strong>.
+        Buscá el producto para asignárselo.
+      </p>
+      <button
+        type="button"
+        aria-label="Descartar código escaneado"
+        class="shrink-0 w-9 h-9 -mr-1 -mt-0.5 text-muted"
+        @click="codigoSinProducto = null"
+      >
+        <i class="fas fa-xmark"></i>
+      </button>
+    </div>
 
     <p v-if="productos.error && !productos.actual" class="text-xs text-danger bg-red-50 border border-red-200 rounded-lg p-2">
       {{ productos.error }}
     </p>
 
     <ProductoCardSkeleton v-if="productos.cargandoOtroProducto" />
-    <ProductoCard v-else />
+    <ProductoCard
+      v-else
+      :codigo-por-asignar="codigoSinProducto"
+      @codigo-asignado="codigoSinProducto = null"
+      @descartar-codigo="codigoSinProducto = null"
+    />
 
     <div
       v-if="mostrarCard && reportes.pendientes.total > 0"

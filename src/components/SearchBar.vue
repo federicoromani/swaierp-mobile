@@ -4,7 +4,9 @@ import { useProductosStore } from '../stores/productos'
 import { useAuthStore } from '../stores/auth'
 import EscanerCodigo from './EscanerCodigo.vue'
 
-const emit = defineEmits(['select'])
+// sin-producto: se escaneó un código que no tiene ningún producto (para
+// ofrecer asignárselo a uno).
+const emit = defineEmits(['select', 'sin-producto'])
 
 const productos = useProductosStore()
 const auth = useAuthStore()
@@ -12,17 +14,9 @@ const query = ref('')
 const mostrarResultados = ref(false)
 const escaneando = ref(false)
 let temporizador = null
-// Código escaneado que ya se buscó: al ponerlo en el campo no se repite la búsqueda.
-let yaBuscado = null
 
 watch(query, (valor) => {
   clearTimeout(temporizador)
-  if (valor && valor === yaBuscado) {
-    yaBuscado = null
-    mostrarResultados.value = true
-    return
-  }
-  yaBuscado = null
   if (!valor) {
     mostrarResultados.value = false
     productos.resultados = []
@@ -35,10 +29,10 @@ watch(query, (valor) => {
   }, 300)
 })
 
-function seleccionar(item) {
+function seleccionar(item, escaneado = false) {
   query.value = ''
   mostrarResultados.value = false
-  emit('select', item.prod_id)
+  emit('select', item.prod_id, { escaneado })
 }
 
 function limpiar() {
@@ -46,18 +40,21 @@ function limpiar() {
   mostrarResultados.value = false
 }
 
-// El código de barras es prod_codigo: si un resultado coincide exacto se abre
-// directo; si no, queda escrito en el buscador con lo que se encontró.
+// Lo escaneado se busca primero como código de barras y, si no, como código
+// interno (hay comercios que cargaron el EAN como prod_codigo). Si coincide
+// exacto se abre directo; si no, se avisa para poder asignárselo a un producto.
 async function alEscanear(codigo) {
   escaneando.value = false
   await productos.buscar(codigo)
-  const exacto = productos.resultados.find((p) => String(p.codigo ?? '').toLowerCase() === codigo.toLowerCase())
+  const exacto =
+    productos.resultados.find((p) => p.codigo_barras === codigo) ||
+    productos.resultados.find((p) => String(p.codigo ?? '').toLowerCase() === codigo.toLowerCase())
   if (exacto) {
-    seleccionar(exacto)
+    seleccionar(exacto, true)
     return
   }
-  yaBuscado = codigo
-  query.value = codigo
+  productos.resultados = []
+  emit('sin-producto', codigo)
 }
 
 function alPerderFoco() {

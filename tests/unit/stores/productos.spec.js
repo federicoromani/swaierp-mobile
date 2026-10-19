@@ -107,6 +107,19 @@ describe('stores/productos', () => {
     // usa el código tal cual está guardado y el término de búsqueda tal cual
     // lo tipeó el usuario, sin bajar ninguno de los dos a minúscula. Se fija
     // el comportamiento real tal cual está, no lo que "debería" ser.
+    it('la búsqueda en cache también encuentra por código de barras exacto', async () => {
+      await db.catalogoCache.bulkPut([
+        { prod_id: 1, nombre: 'Yerba', codigo: 'Y-1', codigo_barras: '7790001112223' },
+        { prod_id: 2, nombre: 'Azúcar', codigo: 'A-1', codigo_barras: null },
+      ])
+      productosService.buscar.mockRejectedValue(new Error('No hay conexión con el servidor.'))
+      const productos = useProductosStore()
+
+      await productos.buscar('7790001112223')
+
+      expect(productos.resultados.map((p) => p.prod_id)).toEqual([1])
+    })
+
     it('la búsqueda por código es case-SENSITIVE (asimetría real respecto del filtro por nombre)', async () => {
       await db.catalogoCache.bulkPut([{ prod_id: 3, nombre: 'Tornillo', codigo: 'DST-2' }])
       productosService.buscar.mockResolvedValue({ success: false, error: 'falló' })
@@ -245,6 +258,40 @@ describe('stores/productos', () => {
 
       await expect(productos.registrarConteo(1, -1)).rejects.toThrow('El stock no puede ser negativo.')
       expect(reportes.pendientes.total).toBe(5)
+    })
+  })
+
+  describe('asignarCodigoBarras()', () => {
+    it('en éxito llama al service y reemplaza actual con el detalle devuelto', async () => {
+      const detalle = { success: true, prod_id: 7, nombre: 'Yerba', codigo_barras: '7790001112223' }
+      productosService.asignarCodigoBarras.mockResolvedValue(detalle)
+      const productos = useProductosStore()
+      productos.actual = { prod_id: 7, nombre: 'Yerba', codigo_barras: null }
+
+      await productos.asignarCodigoBarras(7, '7790001112223')
+
+      expect(productosService.asignarCodigoBarras).toHaveBeenCalledWith(7, '7790001112223')
+      expect(productos.actual.codigo_barras).toBe('7790001112223')
+      expect((await db.catalogoCache.get(7)).codigo_barras).toBe('7790001112223')
+    })
+
+    it('una respuesta tardía no pisa otro producto que ya se esté viendo', async () => {
+      productosService.asignarCodigoBarras.mockResolvedValue({ success: true, prod_id: 7, codigo_barras: '1' })
+      const productos = useProductosStore()
+      productos.actual = { prod_id: 999, codigo_barras: null }
+
+      await productos.asignarCodigoBarras(7, '1')
+
+      expect(productos.actual).toEqual({ prod_id: 999, codigo_barras: null })
+    })
+
+    it('código ya asignado a otro producto: lanza el mensaje de la API', async () => {
+      productosService.asignarCodigoBarras.mockResolvedValue({ success: false, error: 'Ese código ya está asignado a "Azúcar".' })
+      const productos = useProductosStore()
+      productos.actual = { prod_id: 7, codigo_barras: null }
+
+      await expect(productos.asignarCodigoBarras(7, '1')).rejects.toThrow('Ese código ya está asignado a "Azúcar".')
+      expect(productos.actual.codigo_barras).toBeNull()
     })
   })
 

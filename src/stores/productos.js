@@ -49,7 +49,10 @@ export const useProductosStore = defineStore('productos', () => {
     const texto = q.toLowerCase()
     const todos = await db.catalogoCache.toArray()
     return todos.filter(
-      (p) => (p.nombre || '').toLowerCase().includes(texto) || (p.codigo || '').includes(q)
+      (p) =>
+        (p.nombre || '').toLowerCase().includes(texto) ||
+        (p.codigo || '').includes(q) ||
+        (p.codigo_barras && p.codigo_barras === q)
     )
   }
 
@@ -124,6 +127,18 @@ export const useProductosStore = defineStore('productos', () => {
     return data
   }
 
+  async function asignarCodigoBarras(prodId, codigoBarras) {
+    const data = await productosService.asignarCodigoBarras(prodId, codigoBarras)
+    if (!data.success) {
+      await rechazar(prodId, data, 'No se pudo guardar el código de barras.')
+    }
+    if (actual.value && actual.value.prod_id === prodId) {
+      actual.value = data
+      db.catalogoCache.put(data)
+    }
+    return data
+  }
+
   async function registrarConteo(prodId, stockContado) {
     // ultimo_conteo previo: con eso "Pendientes de controlar" sabe si este
     // conteo lo saca de la lista aunque no esté en la página cargada.
@@ -156,5 +171,6 @@ export const useProductosStore = defineStore('productos', () => {
     seleccionar,
     actualizarPrecio,
     registrarConteo,
+    asignarCodigoBarras,
   }
 })

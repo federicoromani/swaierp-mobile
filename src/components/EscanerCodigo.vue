@@ -2,6 +2,11 @@
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { crearLector, mensajeErrorCamara } from '../utils/lectorCodigos'
 
+defineProps({
+  titulo: { type: String, default: 'Escanear código' },
+  // Texto del botón cuando no se puede usar la cámara.
+  textoSinCamara: { type: String, default: 'Buscar a mano' },
+})
 const emit = defineEmits(['detectado', 'cerrar'])
 
 const video = ref(null)
@@ -92,7 +97,7 @@ onBeforeUnmount(detener)
     @keydown.esc="cerrar"
   >
     <div class="flex items-center justify-between px-4 py-3">
-      <p class="font-semibold">Escanear código</p>
+      <p class="font-semibold">{{ titulo }}</p>
       <button
         type="button"
         aria-label="Cerrar escáner"
@@ -117,7 +122,7 @@ onBeforeUnmount(detener)
         <i class="fas fa-camera text-3xl text-white/60"></i>
         <p class="text-sm">{{ error }}</p>
         <button type="button" class="h-11 px-5 rounded-xl bg-white text-primary font-semibold" @click="cerrar">
-          Buscar a mano
+          {{ textoSinCamara }}
         </button>
       </div>
     </div>

@@ -89,9 +89,9 @@ export function mockAuthEndpoint({ login, refresh, logout, config } = {}) {
 // ---------------------------------------------------------------------------
 
 /**
- * @param {{buscar?, detalle?, actualizarPrecio?, registrarConteo?}} acciones
+ * @param {{buscar?, detalle?, actualizarPrecio?, registrarConteo?, asignarCodigoBarras?}} acciones
  */
-export function mockProductosEndpoint({ buscar, detalle, actualizarPrecio, registrarConteo } = {}) {
+export function mockProductosEndpoint({ buscar, detalle, actualizarPrecio, registrarConteo, asignarCodigoBarras } = {}) {
   const url = `${BASE}/api_productos.php`
   return [
     http.get(url, ({ request }) => {
@@ -104,7 +104,11 @@ export function mockProductosEndpoint({ buscar, detalle, actualizarPrecio, regis
     }),
     http.post(url, async ({ request }) => {
       const { accion } = await leerAccionDeBody(request)
-      const mapa = { actualizar_precio: actualizarPrecio, registrar_conteo: registrarConteo }
+      const mapa = {
+        actualizar_precio: actualizarPrecio,
+        registrar_conteo: registrarConteo,
+        asignar_codigo_barras: asignarCodigoBarras,
+      }
       if (!(accion in mapa) || mapa[accion] === undefined) {
         return accionNoMockeada(accion)
       }

@@ -32,7 +32,7 @@ function productoBase(overrides = {}) {
   }
 }
 
-function montar({ actual = null, margenObjetivo = 30, config } = {}) {
+function montar({ actual = null, margenObjetivo = 30, config, props = {} } = {}) {
   const pinia = createTestingPinia({
     stubActions: true,
     initialState: {
@@ -41,7 +41,7 @@ function montar({ actual = null, margenObjetivo = 30, config } = {}) {
       ui: { toast: null },
     },
   })
-  const wrapper = mount(ProductoCard, { global: { plugins: [pinia] } })
+  const wrapper = mount(ProductoCard, { props, global: { plugins: [pinia], stubs: { EscanerCodigo: true } } })
   const productos = useProductosStore()
   const ui = useUiStore()
   return { wrapper, productos, ui, pinia }
@@ -448,6 +448,113 @@ describe('components/ProductoCard', () => {
       // La ganancia también volvió a 50%.
       await (await inputCosto(wrapper)).setValue(200)
       expect((await inputVenta(wrapper)).element.value).toBe('300')
+    })
+  })
+
+  describe('código de barras', () => {
+    const escaner = (wrapper) => wrapper.findComponent({ name: 'EscanerCodigo' })
+
+    it('sin código: lo dice y ofrece "Asignar", que abre el escáner', async () => {
+      const { wrapper } = montar({ actual: productoBase({ codigo_barras: null }) })
+      expect(wrapper.text()).toContain('Sin código de barras')
+      expect(wrapper.find('button[aria-label="Quitar código de barras"]').exists()).toBe(false)
+
+      await wrapper.find('button[aria-label="Asignar código de barras"]').trigger('click')
+
+      expect(escaner(wrapper).exists()).toBe(true)
+      expect(escaner(wrapper).props('titulo')).toBe('Asignar código de barras')
+    })
+
+    it('lo escaneado se guarda en el producto, vibra y avisa', async () => {
+      const vibrate = vi.fn()
+      vi.stubGlobal('navigator', { ...navigator, vibrate })
+      const { wrapper, productos, ui } = montar({ actual: productoBase({ codigo_barras: null }) })
+      await wrapper.find('button[aria-label="Asignar código de barras"]').trigger('click')
+
+      escaner(wrapper).vm.$emit('detectado', '7790001112223')
+      await flushPromises()
+
+      expect(productos.asignarCodigoBarras).toHaveBeenCalledWith(1, '7790001112223')
+      expect(escaner(wrapper).exists()).toBe(false)
+      expect(vibrate).toHaveBeenCalled()
+      expect(ui.mostrarToast).toHaveBeenCalledWith('Código de barras guardado.', 'success')
+      expect(wrapper.emitted('codigo-asignado')).toEqual([['7790001112223']])
+    })
+
+    it('con código: lo muestra, "Cambiar" abre el escáner y "Quitar" lo borra', async () => {
+      const { wrapper, productos, ui } = montar({ actual: productoBase({ codigo_barras: '7790001112223' }) })
+      expect(wrapper.text()).toContain('7790001112223')
+
+      await wrapper.find('button[aria-label="Cambiar código de barras"]').trigger('click')
+      expect(escaner(wrapper).exists()).toBe(true)
+      escaner(wrapper).vm.$emit('cerrar')
+      await flushPromises()
+      expect(escaner(wrapper).exists()).toBe(false)
+
+      await wrapper.find('button[aria-label="Quitar código de barras"]').trigger('click')
+      await flushPromises()
+      expect(productos.asignarCodigoBarras).toHaveBeenCalledWith(1, '')
+      expect(ui.mostrarToast).toHaveBeenCalledWith('Código de barras quitado.', 'success')
+      expect(wrapper.emitted('codigo-asignado')).toBeUndefined()
+    })
+
+    it('escanear el mismo código que ya tiene no llama a la API', async () => {
+      const { wrapper, productos, ui } = montar({ actual: productoBase({ codigo_barras: '123' }) })
+      await wrapper.find('button[aria-label="Cambiar código de barras"]').trigger('click')
+
+      escaner(wrapper).vm.$emit('detectado', '123')
+      await flushPromises()
+
+      expect(productos.asignarCodigoBarras).not.toHaveBeenCalled()
+      expect(ui.mostrarToast).toHaveBeenCalledWith('Ese ya es el código de barras de este producto.', 'info')
+    })
+
+    it('si la API lo rechaza (ya es de otro producto), muestra el mensaje tal cual', async () => {
+      const { wrapper, productos, ui } = montar({ actual: productoBase({ codigo_barras: null }) })
+      productos.asignarCodigoBarras.mockRejectedValue(new Error('Ese código ya está asignado a "Clavo".'))
+      await wrapper.find('button[aria-label="Asignar código de barras"]').trigger('click')
+
+      escaner(wrapper).vm.$emit('detectado', '123')
+      await flushPromises()
+
+      expect(ui.mostrarToast).toHaveBeenCalledWith('Ese código ya está asignado a "Clavo".', 'error')
+      expect(wrapper.emitted('codigo-asignado')).toBeUndefined()
+    })
+
+    describe('código escaneado en el buscador sin producto (codigoPorAsignar)', () => {
+      it('propone asignarlo a este producto', async () => {
+        const { wrapper, productos } = montar({
+          actual: productoBase({ codigo_barras: null }),
+          props: { codigoPorAsignar: '7790001112223' },
+        })
+        expect(wrapper.text()).toContain('Escaneaste 7790001112223, que no es de ningún producto.')
+        expect(wrapper.text()).not.toContain('Reemplazaría')
+
+        await botonPorTexto(wrapper, 'Asignar a este producto').trigger('click')
+        await flushPromises()
+
+        expect(productos.asignarCodigoBarras).toHaveBeenCalledWith(1, '7790001112223')
+        expect(wrapper.emitted('codigo-asignado')).toEqual([['7790001112223']])
+      })
+
+      it('si el producto ya tiene otro código, avisa que lo reemplaza', () => {
+        const { wrapper } = montar({ actual: productoBase({ codigo_barras: '111' }), props: { codigoPorAsignar: '222' } })
+        expect(wrapper.text()).toContain('Reemplazaría al código actual.')
+      })
+
+      it('"No" lo descarta', async () => {
+        const { wrapper, productos } = montar({ actual: productoBase(), props: { codigoPorAsignar: '222' } })
+
+        await wrapper.find('button[aria-label="No asignar el código escaneado"]').trigger('click')
+
+        expect(wrapper.emitted('descartar-codigo')).toHaveLength(1)
+        expect(productos.asignarCodigoBarras).not.toHaveBeenCalled()
+      })
+
+      it('no se propone si ya es el código del producto', () => {
+        const { wrapper } = montar({ actual: productoBase({ codigo_barras: '222' }), props: { codigoPorAsignar: '222' } })
+        expect(wrapper.text()).not.toContain('Escaneaste')
+      })
     })
   })
 

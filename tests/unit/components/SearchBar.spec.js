@@ -151,7 +151,7 @@ describe('components/SearchBar', () => {
 
     await boton.trigger('mousedown')
 
-    expect(wrapper.emitted('select')).toEqual([[5]])
+    expect(wrapper.emitted('select')).toEqual([[5, { escaneado: false }]])
     expect(input.element.value).toBe('')
     expect(wrapper.find(DROPDOWN).exists()).toBe(false)
   })
@@ -181,7 +181,7 @@ describe('components/SearchBar', () => {
 
     await chip.trigger('click')
 
-    expect(wrapper.emitted('select')).toEqual([[9]])
+    expect(wrapper.emitted('select')).toEqual([[9, { escaneado: false }]])
   })
 
   it('con query tipeada, NO muestra los chips de recientes', async () => {
@@ -220,38 +220,59 @@ describe('components/SearchBar', () => {
       expect(wrapper.find('button[aria-label="Limpiar búsqueda"]').exists()).toBe(true)
     })
 
-    it('código que coincide exacto con un producto: lo abre directo', async () => {
-      const { wrapper, productos } = montar()
+    async function escanear(wrapper, productos, codigo, resultados) {
       productos.buscar.mockImplementation(async () => {
-        productos.resultados = [
-          { prod_id: 7, codigo: '7790001234567', nombre: 'Tornillo', marca: 'X', stock_actual: 1, margen_pct: 40 },
-        ]
+        productos.resultados = resultados
       })
       await wrapper.find('button[aria-label="Escanear código de barras"]').trigger('click')
-
-      wrapper.findComponent({ name: 'EscanerCodigo' }).vm.$emit('detectado', '7790001234567')
+      wrapper.findComponent({ name: 'EscanerCodigo' }).vm.$emit('detectado', codigo)
       await flushPromises()
+    }
+
+    it('código de barras asignado a un producto: lo abre directo', async () => {
+      const { wrapper, productos } = montar()
+
+      await escanear(wrapper, productos, '7790001234567', [
+        { prod_id: 7, codigo: 'T-7', codigo_barras: '7790001234567', nombre: 'Tornillo', marca: 'X', stock_actual: 1, margen_pct: 40 },
+      ])
 
       expect(productos.buscar).toHaveBeenCalledWith('7790001234567')
-      expect(wrapper.emitted('select')).toEqual([[7]])
+      expect(wrapper.emitted('select')).toEqual([[7, { escaneado: true }]])
       expect(wrapper.findComponent({ name: 'EscanerCodigo' }).exists()).toBe(false)
     })
 
-    it('sin coincidencia exacta: deja el código en el buscador con los resultados, sin buscar dos veces', async () => {
+    it('el código de barras gana sobre un código interno igual de otro producto', async () => {
       const { wrapper, productos } = montar()
-      productos.buscar.mockImplementation(async () => {
-        productos.resultados = [{ prod_id: 8, codigo: 'OTRO', nombre: 'Parecido', marca: 'X', stock_actual: 1, margen_pct: 40 }]
-      })
-      await wrapper.find('button[aria-label="Escanear código de barras"]').trigger('click')
 
-      wrapper.findComponent({ name: 'EscanerCodigo' }).vm.$emit('detectado', '123')
-      await flushPromises()
-      vi.advanceTimersByTime(300)
-      await flushPromises()
+      await escanear(wrapper, productos, '123', [
+        { prod_id: 1, codigo: '123', codigo_barras: null, nombre: 'Interno', marca: 'X', stock_actual: 1, margen_pct: 40 },
+        { prod_id: 2, codigo: 'B-2', codigo_barras: '123', nombre: 'Barras', marca: 'X', stock_actual: 1, margen_pct: 40 },
+      ])
 
-      expect(wrapper.find('input').element.value).toBe('123')
+      expect(wrapper.emitted('select')).toEqual([[2, { escaneado: true }]])
+    })
+
+    it('sin código de barras, un código interno exacto también lo abre', async () => {
+      const { wrapper, productos } = montar()
+
+      await escanear(wrapper, productos, '7790001234567', [
+        { prod_id: 7, codigo: '7790001234567', nombre: 'Tornillo', marca: 'X', stock_actual: 1, margen_pct: 40 },
+      ])
+
+      expect(wrapper.emitted('select')).toEqual([[7, { escaneado: true }]])
+    })
+
+    it('sin coincidencia exacta: avisa "sin-producto" con el código y no deja resultados parecidos', async () => {
+      const { wrapper, productos } = montar()
+
+      await escanear(wrapper, productos, '123', [
+        { prod_id: 8, codigo: 'OTRO-123', nombre: 'Parecido', marca: 'X', stock_actual: 1, margen_pct: 40 },
+      ])
+
+      expect(wrapper.emitted('sin-producto')).toEqual([['123']])
       expect(wrapper.emitted('select')).toBeUndefined()
-      expect(wrapper.find(DROPDOWN).text()).toContain('Parecido')
+      expect(wrapper.find('input').element.value).toBe('')
+      expect(productos.resultados).toEqual([])
       expect(productos.buscar).toHaveBeenCalledTimes(1)
     })
   })

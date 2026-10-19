@@ -133,7 +133,7 @@ describe('SearchBar + productos store: búsqueda', () => {
     await botonResultado.trigger('mousedown')
 
     expect(wrapper.emitted('select')).toBeTruthy()
-    expect(wrapper.emitted('select')[0]).toEqual([555])
+    expect(wrapper.emitted('select')[0]).toEqual([555, { escaneado: false }])
     expect(wrapper.find('input').element.value).toBe('')
   })
 

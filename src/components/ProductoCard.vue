@@ -5,8 +5,16 @@ import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 import { textoRelativo, urgenciaConteo } from '../utils/fechas'
 import { unidadCorta, esUnidadEntera } from '../utils/unidades'
+import EscanerCodigo from './EscanerCodigo.vue'
 
-const emit = defineEmits(['guardado'])
+const props = defineProps({
+  // Código escaneado en el buscador que no es de ningún producto: la card
+  // ofrece asignárselo al producto abierto.
+  codigoPorAsignar: { type: String, default: null },
+})
+// codigo-asignado: se guardó el código de barras (codigoPorAsignar o uno
+// escaneado desde la card). descartar-codigo: no era de este producto.
+const emit = defineEmits(['guardado', 'codigo-asignado', 'descartar-codigo'])
 
 const productos = useProductosStore()
 const auth = useAuthStore()
@@ -164,6 +172,38 @@ const margenTexto = computed(
   () => `${margenActual.value.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
 )
 
+// --- Código de barras ---
+const escaneandoCodigo = ref(false)
+const guardandoCodigo = ref(false)
+const proponerCodigo = computed(
+  () => !!props.codigoPorAsignar && props.codigoPorAsignar !== p.value?.codigo_barras
+)
+
+/** @param {string} codigo '' para quitarlo. */
+async function guardarCodigo(codigo) {
+  if (guardandoCodigo.value) return
+  if (codigo && codigo === p.value.codigo_barras) {
+    ui.mostrarToast('Ese ya es el código de barras de este producto.', 'info')
+    return
+  }
+  guardandoCodigo.value = true
+  try {
+    await productos.asignarCodigoBarras(p.value.prod_id, codigo)
+    vibrar()
+    ui.mostrarToast(codigo ? 'Código de barras guardado.' : 'Código de barras quitado.', 'success')
+    if (codigo) emit('codigo-asignado', codigo)
+  } catch (e) {
+    ui.mostrarToast(e.message, 'error')
+  } finally {
+    guardandoCodigo.value = false
+  }
+}
+
+function alEscanearCodigo(codigo) {
+  escaneandoCodigo.value = false
+  guardarCodigo(codigo)
+}
+
 function formatearDiferencia(n) {
   if (!n) return 'sin diferencias'
   return (n > 0 ? '+' : '') + formatear(n)
@@ -262,7 +302,58 @@ async function guardar() {
       >
         <i class="fas fa-clipboard-check mr-1"></i>Último conteo: {{ ultimoConteo }}
       </p>
+      <div class="flex items-center justify-between gap-2 mt-2">
+        <p class="min-w-0 truncate text-sm" :class="p.codigo_barras ? 'font-mono' : 'text-muted'">
+          <i class="fas fa-barcode mr-1.5 text-muted"></i>{{ p.codigo_barras || 'Sin código de barras' }}
+        </p>
+        <div class="flex gap-1.5 shrink-0">
+          <button
+            v-if="p.codigo_barras"
+            type="button"
+            aria-label="Quitar código de barras"
+            :disabled="guardandoCodigo"
+            class="h-10 px-3 rounded-lg border border-slate-200 text-sm text-muted active:scale-95 disabled:opacity-50"
+            @click="guardarCodigo('')"
+          >
+            Quitar
+          </button>
+          <button
+            type="button"
+            :aria-label="p.codigo_barras ? 'Cambiar código de barras' : 'Asignar código de barras'"
+            :disabled="guardandoCodigo"
+            class="h-10 px-3 rounded-lg border border-slate-200 text-sm font-semibold text-primary active:scale-95 disabled:opacity-50"
+            @click="escaneandoCodigo = true"
+          >
+            <i class="fas fa-camera mr-1"></i>{{ p.codigo_barras ? 'Cambiar' : 'Asignar' }}
+          </button>
+        </div>
+      </div>
     </header>
+
+    <div v-if="proponerCodigo" role="status" class="rounded-xl border border-sky-200 bg-sky-50 p-3 space-y-2">
+      <p class="text-sm">
+        Escaneaste <strong class="font-mono">{{ codigoPorAsignar }}</strong>, que no es de ningún producto.
+        <template v-if="p.codigo_barras">Reemplazaría al código actual.</template>
+      </p>
+      <div class="flex gap-2">
+        <button
+          type="button"
+          :disabled="guardandoCodigo"
+          class="flex-1 h-11 rounded-xl bg-primary text-white text-sm font-semibold active:scale-95 disabled:opacity-60"
+          @click="guardarCodigo(codigoPorAsignar)"
+        >
+          <i class="fas fa-barcode mr-1.5"></i>Asignar a este producto
+        </button>
+        <button
+          type="button"
+          aria-label="No asignar el código escaneado"
+          class="h-11 px-4 rounded-xl border border-slate-200 bg-white text-sm text-muted active:scale-95"
+          @click="emit('descartar-codigo')"
+        >
+          No
+        </button>
+      </div>
+    </div>
 
     <section class="space-y-2">
       <div class="flex items-stretch gap-3">
@@ -448,5 +539,13 @@ async function guardar() {
         <i class="fas mr-2" :class="hayCambios ? 'fa-check' : 'fa-clipboard-check'"></i>{{ etiquetaBoton }}
       </button>
     </div>
+
+    <EscanerCodigo
+      v-if="escaneandoCodigo"
+      titulo="Asignar código de barras"
+      texto-sin-camara="Cerrar"
+      @detectado="alEscanearCodigo"
+      @cerrar="escaneandoCodigo = false"
+    />
   </div>
 </template>
